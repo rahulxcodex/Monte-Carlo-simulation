@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Monte Carlo Simulator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: { 750: '#2d3748', 850: '#1a202c', 950: '#0d1117' }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Plotly.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+    <style>
+        body { background-color: #0d1117; color: #e5e7eb; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; font-weight: 600; }
+        .tab-inactive { color: #9ca3af; border-bottom: 2px solid transparent; font-weight: 500; transition: all 0.2s; }
+        .tab-inactive:hover { color: #e5e7eb; border-bottom: 2px solid #4b5563; }
+
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+            background: #06b6d4; cursor: pointer; margin-top: -6px;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: #374151; border-radius: 2px;
+        }
+        
+        .glass-panel { background: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(75, 85, 99, 0.4); }
+        
+        .spinner { border: 3px solid rgba(255, 255, 255, 0.1); border-radius: 50%; border-top-color: #06b6d4; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="h-screen flex flex-col lg:flex-row overflow-hidden font-sans antialiased">
+
+    <aside class="w-full lg:w-80 glass-panel flex flex-col z-20 flex-shrink-0 lg:h-full max-h-[40vh] lg:max-h-full overflow-y-auto shadow-2xl">
+        <div class="p-5 border-b border-gray-700 sticky top-0 bg-gray-900/95 backdrop-blur z-10 flex justify-between items-center">
+            <h1 class="text-lg font-bold text-white flex items-center gap-2 tracking-wide">
+                <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                PRO-SIM 
+            </h1>
+        </div>
+        
+        <div class="p-5 flex flex-col gap-6">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Asset Ticker</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="ticker" value="RELIANCE.NS" list="indian-stocks" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors uppercase">
+                        <button id="fetch-btn" onclick="fetchLiveMarketData()" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-cyan-400 font-bold transition-colors flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        </button>
+                    </div>
+                    <datalist id="indian-stocks"></datalist>
+                </div>
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Initial Price</label>
+                    <input type="number" id="s0" value="2950" min="1" step="0.01" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors">
+                </div>
+            </div>
+            <hr class="border-gray-700">
+            <div class="space-y-5">
+                <div>
+                    <label class="flex justify-between text-xs uppercase tracking-wider text-gray-400 mb-2">
+                        <span>Expected Return</span>
+                        <span id="mu-val" class="text-cyan-400 font-mono">15.0%</span>
+                    </label>
+                    <input type="range" id="mu" value="15" min="-50" max="100" step="0.5" class="w-full">
+                </div>
+                <div>
+                    <label class="flex justify-between text-xs uppercase tracking-wider text-gray-400 mb-2">
+                        <span>Volatility</span>
+                        <span id="sigma-val" class="text-cyan-400 font-mono">35.0%</span>
+                    </label>
+                    <input type="range" id="sigma" value="35" min="1" max="150" step="0.5" class="w-full">
+                </div>
+            </div>
+            <hr class="border-gray-700">
+            <button onclick="triggerSimulation()" id="run-btn" class="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded transition-all flex justify-center items-center gap-2">
+                <span>Calculate Matrix</span>
+            </button>
+            <div id="error-message" class="hidden text-sm text-red-400 mt-1 bg-red-900/20 p-2 rounded border border-red-800/50"></div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full overflow-y-auto p-4 lg:p-8 relative z-0">
+        <header class="mb-6"><h2 id="main-title" class="text-2xl font-bold text-white mb-1">Monte Carlo Projection</h2></header>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">Current Base</p><p id="metric-s0" class="text-xl font-bold font-mono">0.00</p></div>
+            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">Expected Mean</p><p id="metric-mean" class="text-xl font-bold font-mono">0.00</p></div>
+            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">VaR (5th)</p><p id="metric-5th" class="text-xl font-bold text-red-400 font-mono">0.00</p></div>
+            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">Best (95th)</p><p id="metric-95th" class="text-xl font-bold text-green-400 font-mono">0.00</p></div>
+        </div>
+        <div class="glass-panel rounded-lg flex-1 min-h-[400px] flex flex-col mb-6 relative">
+            <div class="flex border-b border-gray-700 bg-gray-800/50 rounded-t-lg px-2">
+                <button onclick="switchTab('line')" id="tab-line" class="px-4 py-3 text-sm tab-active focus:outline-none">Path Projection</button>
+                <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-sm tab-inactive focus:outline-none">Distribution</button>
+            </div>
+            <div class="relative flex-1 w-full h-full p-2">
+                <div id="chart-line" class="absolute inset-0 w-full h-full transition-opacity duration-300"></div>
+                <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none transition-opacity duration-300"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const fmtNumDec = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const indianTickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "INFY.NS", "ITC.NS"];
+        const BACKEND_URL = 'http://localhost:8000';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const dataList = document.getElementById('indian-stocks');
+            indianTickers.forEach(ticker => {
+                const option = document.createElement('option');
+                option.value = ticker;
+                dataList.appendChild(option);
+            });
+        });
+
+        async function fetchLiveMarketData() {
+            const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/stock/${ticker}`);
+                const data = await response.json();
+                document.getElementById('s0').value = data.current_price.toFixed(2);
+                triggerSimulation();
+            } catch (error) { showError("Error fetching data. Ensure local API is running."); }
+        }
+
+        function triggerSimulation() { executeSimulation(); }
+        
+        function executeSimulation() {
+            const S0 = parseFloat(document.getElementById('s0').value);
+            const mu = parseFloat(document.getElementById('mu').value) / 100;
+            const sigma = parseFloat(document.getElementById('sigma').value) / 100;
+            const days = 252;
+            const sims = 1000;
+            const dt = 1 / 252;
+            const drift = (mu - 0.5 * Math.pow(sigma, 2)) * dt;
+            const vol = sigma * Math.sqrt(dt);
+            
+            let finalPrices = [];
+            for (let i = 0; i < sims; i++) {
+                let p = S0;
+                for (let d = 1; d <= days; d++) {
+                    p *= Math.exp(drift + vol * (Math.sqrt(-2*Math.log(Math.random())) * Math.cos(2*Math.PI*Math.random())));
+                }
+                finalPrices.push(p);
+            }
+            finalPrices.sort((a,b) => a-b);
+            document.getElementById('metric-s0').textContent = fmtNumDec.format(S0);
+            document.getElementById('metric-mean').textContent = fmtNumDec.format(finalPrices.reduce((a,b)=>a+b)/sims);
+            document.getElementById('metric-5th').textContent = fmtNumDec.format(finalPrices[Math.floor(sims*0.05)]);
+            document.getElementById('metric-95th').textContent = fmtNumDec.format(finalPrices[Math.floor(sims*0.95)]);
+        }
+    </script>
+</body>
+</html>
