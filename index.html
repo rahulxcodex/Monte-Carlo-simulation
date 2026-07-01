@@ -1,174 +1,1169 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Monte Carlo Simulator</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        gray: { 750: '#2d3748', 850: '#1a202c', 950: '#0d1117' }
-                    }
-                }
-            }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRO-SIM · Monte Carlo Terminal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          ink:    { 950: '#070a10', 900: '#0b0f17', 800: '#10151f', 700: '#161d2b', 600: '#1f2837' },
+          line:   '#212a3a',
+          cyan:   { 400: '#5eead4', 500: '#22d3ee', 600: '#0891b2' },
+          amber:  { 400: '#fbbf24', 500: '#f5b942' },
+          coral:  { 400: '#f0997b', 500: '#d85a30' },
+          loss:   '#f87171',
+          gain:   '#34d399'
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body: ['Inter', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace']
         }
-    </script>
-    <!-- Plotly.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
-    <style>
-        body { background-color: #0d1117; color: #e5e7eb; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #1f2937; }
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-        
-        .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; font-weight: 600; }
-        .tab-inactive { color: #9ca3af; border-bottom: 2px solid transparent; font-weight: 500; transition: all 0.2s; }
-        .tab-inactive:hover { color: #e5e7eb; border-bottom: 2px solid #4b5563; }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<style>
+  body { background:#070a10; color:#e7ebf2; font-family:'Inter',sans-serif; }
+  .font-display { font-family:'Space Grotesk',sans-serif; }
+  .font-mono { font-family:'JetBrains Mono',monospace; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:#0b0f17; }
+  ::-webkit-scrollbar-thumb { background:#212a3a; border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:#2e3a4f; }
 
-        input[type=range] { -webkit-appearance: none; background: transparent; }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
-            background: #06b6d4; cursor: pointer; margin-top: -6px;
-            box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%; height: 4px; cursor: pointer; background: #374151; border-radius: 2px;
-        }
-        
-        .glass-panel { background: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(75, 85, 99, 0.4); }
-        
-        .spinner { border: 3px solid rgba(255, 255, 255, 0.1); border-radius: 50%; border-top-color: #06b6d4; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+  .glass { background:rgba(16,21,31,0.72); backdrop-filter:blur(14px); border:1px solid rgba(33,42,58,0.8); }
+  .glass-strong { background:rgba(11,15,23,0.92); backdrop-filter:blur(18px); border:1px solid rgba(33,42,58,0.9); }
+
+  .tab-active { color:#22d3ee; border-bottom:2px solid #22d3ee; }
+  .tab-inactive { color:#6b7688; border-bottom:2px solid transparent; transition:color .15s; }
+  .tab-inactive:hover { color:#cbd5e1; }
+
+  input[type=range] { -webkit-appearance:none; background:transparent; }
+  input[type=range]::-webkit-slider-runnable-track { width:100%; height:3px; background:#1f2837; border-radius:2px; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; height:14px; width:14px; border-radius:50%;
+    background:#22d3ee; cursor:pointer; margin-top:-5.5px;
+    box-shadow:0 0 8px rgba(34,211,238,.6);
+  }
+  input[type=range]:disabled::-webkit-slider-thumb { background:#445065; box-shadow:none; cursor:not-allowed; }
+  input[type=range]:disabled::-webkit-slider-runnable-track { background:#141a26; }
+
+  .spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,.15); border-radius:50%; border-top-color:#070a10; animation:spin .7s linear infinite; }
+  .spinner-cyan { border:2px solid rgba(34,211,238,.15); border-top-color:#22d3ee; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .toggle { width:36px; height:20px; background:#1f2837; border-radius:999px; position:relative; transition:background .15s; cursor:pointer; }
+  .toggle.on { background:#0891b2; }
+  .toggle.on.amber-on { background:#b45309; }
+  .toggle-dot { position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#cbd5e1; transition:transform .15s; }
+  .toggle.on .toggle-dot { transform:translateX(16px); background:#fff; }
+  .toggle.disabled { opacity:.4; cursor:not-allowed; }
+
+  .suggest-row:hover, .suggest-row.active { background:rgba(34,211,238,0.08); }
+  .fade-in { animation:fadeIn .35s ease both; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
+
+  ::placeholder { color:#475064; }
+</style>
 </head>
-<body class="h-screen flex flex-col lg:flex-row overflow-hidden font-sans antialiased">
+<body class="h-screen flex flex-col lg:flex-row overflow-hidden antialiased">
 
-    <aside class="w-full lg:w-80 glass-panel flex flex-col z-20 flex-shrink-0 lg:h-full max-h-[40vh] lg:max-h-full overflow-y-auto shadow-2xl">
-        <div class="p-5 border-b border-gray-700 sticky top-0 bg-gray-900/95 backdrop-blur z-10 flex justify-between items-center">
-            <h1 class="text-lg font-bold text-white flex items-center gap-2 tracking-wide">
-                <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                PRO-SIM 
-            </h1>
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="w-full lg:w-[22rem] glass-strong flex flex-col z-20 flex-shrink-0 lg:h-full max-h-[46vh] lg:max-h-full overflow-y-auto">
+    <div class="p-5 border-b border-ink-600 sticky top-0 bg-ink-900/95 backdrop-blur z-10">
+      <h1 class="font-display text-lg font-bold text-white flex items-center gap-2 tracking-wide">
+        <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+        PRO-SIM
+        <span class="ml-auto text-[10px] font-mono font-normal tracking-widest text-ink-600 border border-ink-600 rounded px-1.5 py-0.5" id="status-pill">OFFLINE</span>
+      </h1>
+      <p class="text-xs text-ink-600/80 mt-1 font-mono">Monte Carlo equity terminal</p>
+    </div>
+
+    <div class="p-5 flex flex-col gap-6">
+
+      <!-- Ticker search -->
+      <div class="relative">
+        <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Ticker / Company</label>
+        <div class="flex gap-2">
+          <input type="text" id="ticker" value="RELIANCE.NS" autocomplete="off"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors uppercase">
+          <button id="fetch-btn" onclick="fetchLiveMarketData()"
+            class="bg-ink-700 hover:bg-ink-600 border border-ink-600 px-3 py-2 rounded text-cyan-400 transition-colors flex items-center justify-center shrink-0" title="Fetch live data">
+            <svg id="fetch-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          </button>
         </div>
-        
-        <div class="p-5 flex flex-col gap-6">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Asset Ticker</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="ticker" value="RELIANCE.NS" list="indian-stocks" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors uppercase">
-                        <button id="fetch-btn" onclick="fetchLiveMarketData()" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-cyan-400 font-bold transition-colors flex items-center justify-center">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                        </button>
-                    </div>
-                    <datalist id="indian-stocks"></datalist>
-                </div>
-                <div>
-                    <label class="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Initial Price</label>
-                    <input type="number" id="s0" value="2950" min="1" step="0.01" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors">
-                </div>
-            </div>
-            <hr class="border-gray-700">
-            <div class="space-y-5">
-                <div>
-                    <label class="flex justify-between text-xs uppercase tracking-wider text-gray-400 mb-2">
-                        <span>Expected Return</span>
-                        <span id="mu-val" class="text-cyan-400 font-mono">15.0%</span>
-                    </label>
-                    <input type="range" id="mu" value="15" min="-50" max="100" step="0.5" class="w-full">
-                </div>
-                <div>
-                    <label class="flex justify-between text-xs uppercase tracking-wider text-gray-400 mb-2">
-                        <span>Volatility</span>
-                        <span id="sigma-val" class="text-cyan-400 font-mono">35.0%</span>
-                    </label>
-                    <input type="range" id="sigma" value="35" min="1" max="150" step="0.5" class="w-full">
-                </div>
-            </div>
-            <hr class="border-gray-700">
-            <button onclick="triggerSimulation()" id="run-btn" class="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded transition-all flex justify-center items-center gap-2">
-                <span>Calculate Matrix</span>
-            </button>
-            <div id="error-message" class="hidden text-sm text-red-400 mt-1 bg-red-900/20 p-2 rounded border border-red-800/50"></div>
+        <div id="suggest-box" class="hidden absolute mt-1 w-full glass-strong rounded-lg shadow-2xl overflow-hidden z-30 max-h-56 overflow-y-auto"></div>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="quickPickIndex('^NSEI')" class="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
+        <button onclick="quickPickIndex('^BSESN')" class="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Sensex 30</button>
+      </div>
+
+      <!-- Company readout -->
+      <div id="company-card" class="hidden text-xs leading-relaxed bg-ink-800/60 border border-ink-600 rounded-lg p-3 font-mono">
+        <p id="co-name" class="text-white text-sm font-display font-semibold mb-0.5"></p>
+        <p id="co-meta" class="text-ink-600"></p>
+      </div>
+
+      <div id="nifty-breakdown-card" class="hidden text-xs leading-relaxed bg-ink-800/60 border border-ink-600 rounded-lg p-3 font-mono">
+        <p class="text-ink-600 uppercase text-[10px] tracking-wider mb-2">Nifty 50 sector composition</p>
+        <div id="nifty-breakdown-list" class="space-y-1"></div>
+      </div>
+
+      <hr class="border-ink-600">
+
+      <!-- Investment / horizon / sims -->
+      <div class="space-y-4">
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Investment Amount</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-600 text-sm" id="currency-sym">₹</span>
+            <input type="number" id="investment" value="100000" min="1" step="1000"
+              class="w-full pl-7 pr-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          </div>
         </div>
-    </aside>
-
-    <main class="flex-1 flex flex-col h-full overflow-y-auto p-4 lg:p-8 relative z-0">
-        <header class="mb-6"><h2 id="main-title" class="text-2xl font-bold text-white mb-1">Monte Carlo Projection</h2></header>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">Current Base</p><p id="metric-s0" class="text-xl font-bold font-mono">0.00</p></div>
-            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">Expected Mean</p><p id="metric-mean" class="text-xl font-bold font-mono">0.00</p></div>
-            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">VaR (5th)</p><p id="metric-5th" class="text-xl font-bold text-red-400 font-mono">0.00</p></div>
-            <div class="glass-panel p-4 rounded-lg"><p class="text-xs text-gray-400 uppercase">Best (95th)</p><p id="metric-95th" class="text-xl font-bold text-green-400 font-mono">0.00</p></div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Investment Horizon</label>
+          <select id="horizon" class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="21">1 Month</option>
+            <option value="63">3 Months</option>
+            <option value="126">6 Months</option>
+            <option value="252" selected>1 Year</option>
+            <option value="504">2 Years</option>
+            <option value="756">3 Years</option>
+          </select>
         </div>
-        <div class="glass-panel rounded-lg flex-1 min-h-[400px] flex flex-col mb-6 relative">
-            <div class="flex border-b border-gray-700 bg-gray-800/50 rounded-t-lg px-2">
-                <button onclick="switchTab('line')" id="tab-line" class="px-4 py-3 text-sm tab-active focus:outline-none">Path Projection</button>
-                <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-sm tab-inactive focus:outline-none">Distribution</button>
-            </div>
-            <div class="relative flex-1 w-full h-full p-2">
-                <div id="chart-line" class="absolute inset-0 w-full h-full transition-opacity duration-300"></div>
-                <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none transition-opacity duration-300"></div>
-            </div>
+        <div>
+          <label class="flex justify-between text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">
+            <span>Simulations</span>
+            <span id="sims-val" class="text-cyan-400">5,000</span>
+          </label>
+          <select id="simulations" class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="1000">1,000</option>
+            <option value="5000" selected>5,000</option>
+            <option value="10000">10,000</option>
+            <option value="25000">25,000</option>
+            <option value="50000">50,000</option>
+            <option value="100000">100,000</option>
+          </select>
         </div>
-    </main>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Simulation Model</label>
+          <select id="sim-model" class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="gbm" selected>GBM · EWMA volatility</option>
+            <option value="bootstrap">Bootstrap · Historical returns</option>
+            <option value="jump">Jump Diffusion · Merton</option>
+          </select>
+          <p id="model-hint" class="text-[10.5px] text-ink-600 leading-relaxed font-mono mt-1.5">Normal shocks scaled by a volatility that reacts to recent turbulence.</p>
+          <button onclick="toggleFormula()" class="mt-2 text-[10.5px] font-mono text-cyan-400/80 hover:text-cyan-400 underline underline-offset-2">Show formula</button>
+          <pre id="model-formula" class="hidden mt-2 text-[10px] leading-relaxed font-mono text-ink-600 bg-ink-800/60 border border-ink-600 rounded p-2.5 whitespace-pre-wrap"></pre>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-ink-600 font-mono">Compare Both Models</span>
+            <p class="text-[10px] text-ink-600 font-mono mt-0.5">Runs GBM + Bootstrap side by side</p>
+          </div>
+          <div id="compare-toggle" class="toggle" onclick="toggleCompare()"><div class="toggle-dot"></div></div>
+        </div>
+      </div>
 
-    <script>
-        const fmtNumDec = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const indianTickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "INFY.NS", "ITC.NS"];
-        const BACKEND_URL = 'https://monte-carlo-simulation-jofo.onrender.com/';
+      <hr class="border-ink-600">
 
-        window.addEventListener('DOMContentLoaded', () => {
-            const dataList = document.getElementById('indian-stocks');
-            indianTickers.forEach(ticker => {
-                const option = document.createElement('option');
-                option.value = ticker;
-                dataList.appendChild(option);
-            });
-        });
+      <!-- Manual override -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[11px] uppercase tracking-wider text-ink-600 font-mono">Manual Override</span>
+          <div id="override-toggle" class="toggle" onclick="toggleOverride()"><div class="toggle-dot"></div></div>
+        </div>
+        <div class="space-y-5" id="override-panel">
+          <div>
+            <label class="flex justify-between text-[11px] uppercase tracking-wider text-ink-600 mb-2 font-mono">
+              <span>Expected Return (μ)</span>
+              <span id="mu-val" class="text-cyan-400">15.0%</span>
+            </label>
+            <input type="range" id="mu" value="15" min="-50" max="100" step="0.5" class="w-full" disabled oninput="onOverrideSlider()">
+          </div>
+          <div>
+            <label class="flex justify-between text-[11px] uppercase tracking-wider text-ink-600 mb-2 font-mono">
+              <span>Volatility (σ)</span>
+              <span id="sigma-val" class="text-cyan-400">35.0%</span>
+            </label>
+            <input type="range" id="sigma" value="35" min="1" max="150" step="0.5" class="w-full" disabled oninput="onOverrideSlider()">
+          </div>
+          <p class="text-[10.5px] text-ink-600 leading-relaxed font-mono">Runs entirely in-browser against the live base price. Toggle off to restore the fitted model.</p>
+        </div>
+      </div>
 
-        async function fetchLiveMarketData() {
-            const ticker = document.getElementById('ticker').value.trim().toUpperCase();
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/stock/${ticker}`);
-                const data = await response.json();
-                document.getElementById('s0').value = data.current_price.toFixed(2);
-                triggerSimulation();
-            } catch (error) { showError("Error fetching data. Ensure local API is running."); }
-        }
+      <hr class="border-ink-600">
 
-        function triggerSimulation() { executeSimulation(); }
-        
-        function executeSimulation() {
-            const S0 = parseFloat(document.getElementById('s0').value);
-            const mu = parseFloat(document.getElementById('mu').value) / 100;
-            const sigma = parseFloat(document.getElementById('sigma').value) / 100;
-            const days = 252;
-            const sims = 1000;
-            const dt = 1 / 252;
-            const drift = (mu - 0.5 * Math.pow(sigma, 2)) * dt;
-            const vol = sigma * Math.sqrt(dt);
-            
-            let finalPrices = [];
-            for (let i = 0; i < sims; i++) {
-                let p = S0;
-                for (let d = 1; d <= days; d++) {
-                    p *= Math.exp(drift + vol * (Math.sqrt(-2*Math.log(Math.random())) * Math.cos(2*Math.PI*Math.random())));
-                }
-                finalPrices.push(p);
-            }
-            finalPrices.sort((a,b) => a-b);
-            document.getElementById('metric-s0').textContent = fmtNumDec.format(S0);
-            document.getElementById('metric-mean').textContent = fmtNumDec.format(finalPrices.reduce((a,b)=>a+b)/sims);
-            document.getElementById('metric-5th').textContent = fmtNumDec.format(finalPrices[Math.floor(sims*0.05)]);
-            document.getElementById('metric-95th').textContent = fmtNumDec.format(finalPrices[Math.floor(sims*0.95)]);
-        }
-    </script>
+      <button onclick="runSimulation()" id="run-btn"
+        class="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-ink-950 font-display font-bold text-sm py-3 px-4 rounded-lg transition-all flex justify-center items-center gap-2">
+        <span id="run-btn-label">Calculate Matrix</span>
+      </button>
+
+      <div id="error-message" class="hidden text-xs text-loss bg-loss/10 p-2.5 rounded border border-loss/30 font-mono leading-relaxed"></div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="flex-1 flex flex-col h-full overflow-y-auto p-4 lg:p-8 relative z-0">
+
+    <header class="mb-6 flex items-end justify-between flex-wrap gap-3">
+      <div>
+        <h2 id="main-title" class="font-display text-2xl font-bold text-white mb-1">Monte Carlo Projection</h2>
+        <p id="main-subtitle" class="text-xs text-ink-600 font-mono">Enter a ticker and run the matrix to begin</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="shareScenario()" id="share-btn" class="text-xs font-mono px-3 py-2 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342a4 4 0 100-2.684m0 2.684a4 4 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a4 4 0 105.368-5.368 4 4 0 00-5.368 5.368zm0 9.632a4 4 0 105.368 5.368 4 4 0 00-5.368-5.368z"/></svg>
+          Share
+        </button>
+        <button onclick="exportCSV()" class="text-xs font-mono px-3 py-2 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 10l5 5 5-5M12 15V3"/></svg>
+          CSV
+        </button>
+        <button onclick="exportPNG()" class="text-xs font-mono px-3 py-2 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 10l5 5 5-5M12 15V3"/></svg>
+          PNG
+        </button>
+      </div>
+    </header>
+
+    <!-- Primary metrics -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <div class="glass p-4 rounded-lg">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Current Price</p>
+        <p id="metric-s0" class="text-xl font-bold font-mono text-white mt-1">—</p>
+      </div>
+      <div class="glass p-4 rounded-lg">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Return (μ)</p>
+        <p id="metric-mu" class="text-xl font-bold font-mono text-white mt-1">—</p>
+      </div>
+      <div class="glass p-4 rounded-lg">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Volatility (σ, EWMA)</p>
+        <p id="metric-sigma" class="text-xl font-bold font-mono text-white mt-1">—</p>
+        <p id="metric-sigma-hist" class="text-[10px] text-ink-600 font-mono mt-0.5">—</p>
+      </div>
+      <div class="glass p-4 rounded-lg">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Sharpe Ratio</p>
+        <p id="metric-sharpe" class="text-xl font-bold font-mono text-white mt-1">—</p>
+      </div>
+    </div>
+
+    <!-- Portfolio metrics -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <div class="glass p-4 rounded-lg">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Portfolio</p>
+        <p id="metric-mean" class="text-xl font-bold font-mono text-white mt-1">—</p>
+        <p id="metric-mean-ci" class="text-[10px] text-ink-600 font-mono mt-0.5">—</p>
+      </div>
+      <div class="glass p-4 rounded-lg">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Probability of Profit</p>
+        <p id="metric-profit" class="text-xl font-bold font-mono text-gain mt-1">—</p>
+      </div>
+      <div class="glass p-4 rounded-lg border-loss/20">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">VaR 95% / 99%</p>
+        <p id="metric-var" class="text-xl font-bold font-mono text-loss mt-1">—</p>
+      </div>
+      <div class="glass p-4 rounded-lg border-loss/20">
+        <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">CVaR 95%</p>
+        <p id="metric-cvar" class="text-xl font-bold font-mono text-loss mt-1">—</p>
+      </div>
+    </div>
+
+    <!-- Best / worst / drawdown strip -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div class="glass p-3 rounded-lg flex items-center justify-between">
+        <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Best Case (95th)</span>
+        <span id="metric-best" class="font-mono font-bold text-gain text-sm">—</span>
+      </div>
+      <div class="glass p-3 rounded-lg flex items-center justify-between">
+        <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Worst Case (5th)</span>
+        <span id="metric-worst" class="font-mono font-bold text-loss text-sm">—</span>
+      </div>
+      <div class="glass p-3 rounded-lg flex items-center justify-between">
+        <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Median Max Drawdown</span>
+        <span id="metric-dd-median" class="font-mono font-bold text-amber-400 text-sm">—</span>
+      </div>
+      <div class="glass p-3 rounded-lg flex items-center justify-between">
+        <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">95th Pct Drawdown</span>
+        <span id="metric-dd-95" class="font-mono font-bold text-loss text-sm">—</span>
+      </div>
+    </div>
+
+    <!-- Compare panel (shown only in compare mode) -->
+    <div id="compare-panel" class="hidden glass rounded-lg p-4 mb-6">
+      <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider mb-3">Model comparison</p>
+      <div class="grid grid-cols-3 gap-x-4 gap-y-2 text-xs font-mono">
+        <div class="text-ink-600">Metric</div>
+        <div class="text-cyan-400">GBM (EWMA)</div>
+        <div class="text-coral-400">Bootstrap</div>
+
+        <div class="text-ink-600">Expected portfolio</div>
+        <div id="cmp-mean-gbm" class="text-white">—</div>
+        <div id="cmp-mean-boot" class="text-white">—</div>
+
+        <div class="text-ink-600">Probability of profit</div>
+        <div id="cmp-profit-gbm" class="text-gain">—</div>
+        <div id="cmp-profit-boot" class="text-gain">—</div>
+
+        <div class="text-ink-600">VaR 95%</div>
+        <div id="cmp-var-gbm" class="text-loss">—</div>
+        <div id="cmp-var-boot" class="text-loss">—</div>
+
+        <div class="text-ink-600">CVaR 95%</div>
+        <div id="cmp-cvar-gbm" class="text-loss">—</div>
+        <div id="cmp-cvar-boot" class="text-loss">—</div>
+
+        <div class="text-ink-600">Median max drawdown</div>
+        <div id="cmp-dd-gbm" class="text-amber-400">—</div>
+        <div id="cmp-dd-boot" class="text-amber-400">—</div>
+      </div>
+    </div>
+
+    <!-- Chart panel -->
+    <div class="glass rounded-lg flex-1 min-h-[440px] flex flex-col relative">
+      <div class="flex border-b border-ink-600 bg-ink-800/40 rounded-t-lg px-2 overflow-x-auto">
+        <button onclick="switchTab('paths')" id="tab-paths" class="px-4 py-3 text-xs font-mono tab-active focus:outline-none whitespace-nowrap">📈 Path Projection</button>
+        <button onclick="switchTab('fan')" id="tab-fan" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📉 Confidence Fan</button>
+        <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📊 Distribution</button>
+        <button onclick="switchTab('dd')" id="tab-dd" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⚠️ Drawdown</button>
+      </div>
+      <div class="relative flex-1 w-full h-full p-2 min-h-[380px]">
+        <div id="chart-paths" class="absolute inset-0 w-full h-full"></div>
+        <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+        <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+        <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+
+        <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-ink-600 gap-2">
+          <svg class="w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <p class="text-xs font-mono">No simulation yet — fetch a ticker and run the matrix</p>
+        </div>
+
+        <div id="loading-overlay" class="hidden absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-900/70 backdrop-blur-sm rounded-b-lg">
+          <div class="spinner spinner-cyan" style="width:28px;height:28px;border-width:3px;"></div>
+          <p id="loading-text" class="text-xs font-mono text-cyan-400">Running simulation…</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-[10px] text-ink-600 font-mono mt-4 text-center">Simulations are statistical projections, not financial advice. Past performance does not guarantee future results.</p>
+  </main>
+
+<script>
+const BACKEND_URL = 'https://rahulrgx-monte-carlo.hf.space';
+const RISK_FREE_RATE = 0.05;
+
+const fmt2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+let currentData = null;      // normalized single-model result (also used as "primary" in compare mode)
+let currentCompare = null;   // { gbm: normalized, bootstrap: normalized } when compareOn
+let currentCurrency = '₹';
+let activeTab = 'paths';
+let overrideOn = false;
+let compareOn = false;
+let suggestIndex = -1;
+let searchDebounce = null;
+
+// ---------- helpers ----------
+function ccySymbol(code) {
+  return { INR:'₹', USD:'$', EUR:'€', GBP:'£', JPY:'¥' }[code] || (code ? code + ' ' : '$');
+}
+function money(n) { return currentCurrency + fmt2.format(n); }
+function pct(n) { return (n * 100).toFixed(1) + '%'; }
+function pctVal(n) { return n.toFixed(1) + '%'; }
+
+function showError(msg) {
+  const box = document.getElementById('error-message');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+}
+function clearError() {
+  document.getElementById('error-message').classList.add('hidden');
+}
+
+// Render free tier sleeps after ~15 min idle; the first request after that
+// can take 30-60s to wake the server and sometimes drops the very first
+// attempt. Retry a couple of times with backoff before surfacing an error.
+async function fetchWithRetry(url, { retries = 2, timeoutMs = 45000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+      if (attempt < retries) {
+        setLoading(true, `Backend waking up (cold start)… retrying (${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, 2500 * (attempt + 1)));
+      }
+    }
+  }
+  throw new Error('Could not reach the backend after retries. It may be asleep (free-tier cold start can take up to a minute — try again), or the deployed main.py is out of date (check CORS settings), or it\'s genuinely offline.');
+}
+function setStatus(text, ok) {
+  const pill = document.getElementById('status-pill');
+  pill.textContent = text;
+  pill.className = 'ml-auto text-[10px] font-mono font-normal tracking-widest rounded px-1.5 py-0.5 border ' +
+    (ok ? 'text-cyan-400 border-cyan-500/40' : 'text-ink-600 border-ink-600');
+}
+function setLoading(on, text) {
+  document.getElementById('loading-overlay').classList.toggle('hidden', !on);
+  if (text) document.getElementById('loading-text').textContent = text;
+  document.getElementById('run-btn').disabled = on;
+  document.getElementById('fetch-btn').disabled = on;
+}
+
+// ---------- ticker search / autocomplete ----------
+const tickerInput = document.getElementById('ticker');
+const suggestBox = document.getElementById('suggest-box');
+
+tickerInput.addEventListener('input', () => {
+  const q = tickerInput.value.trim();
+  clearTimeout(searchDebounce);
+  if (q.length < 1) { hideSuggestions(); return; }
+  searchDebounce = setTimeout(() => fetchSuggestions(q), 250);
+});
+tickerInput.addEventListener('keydown', (e) => {
+  const rows = suggestBox.querySelectorAll('.suggest-row');
+  if (!rows.length) { if (e.key === 'Enter') fetchLiveMarketData(); return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); suggestIndex = Math.min(suggestIndex + 1, rows.length - 1); highlightSuggestion(rows); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); suggestIndex = Math.max(suggestIndex - 1, 0); highlightSuggestion(rows); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (suggestIndex >= 0) rows[suggestIndex].click(); else fetchLiveMarketData(); }
+  else if (e.key === 'Escape') hideSuggestions();
+});
+document.addEventListener('click', (e) => {
+  if (!suggestBox.contains(e.target) && e.target !== tickerInput) hideSuggestions();
+});
+
+function highlightSuggestion(rows) {
+  rows.forEach((r, i) => r.classList.toggle('active', i === suggestIndex));
+}
+function hideSuggestions() {
+  suggestBox.classList.add('hidden');
+  suggestBox.innerHTML = '';
+  suggestIndex = -1;
+}
+
+async function fetchSuggestions(q) {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return;
+    const results = await res.json();
+    if (!results.length) { hideSuggestions(); return; }
+    suggestBox.innerHTML = results.map(r => `
+      <div class="suggest-row px-3 py-2 flex items-center justify-between cursor-pointer text-sm" data-ticker="${r.ticker}">
+        <span class="text-white">${r.name}</span>
+        <span class="text-ink-600 font-mono text-xs">${r.ticker}</span>
+      </div>`).join('');
+    suggestBox.classList.remove('hidden');
+    suggestIndex = -1;
+    suggestBox.querySelectorAll('.suggest-row').forEach(row => {
+      row.addEventListener('click', () => {
+        tickerInput.value = row.dataset.ticker;
+        hideSuggestions();
+        fetchLiveMarketData();
+      });
+    });
+  } catch (e) { /* suggestions are best-effort, fail silently */ }
+}
+
+// ---------- model formulas ----------
+const MODEL_FORMULAS = {
+  gbm:
+`Geometric Brownian Motion (EWMA volatility)
+
+S(t+1) = S(t) · exp[ (μ − ½σ²)·Δt + σ·√Δt·Z ]
+
+  μ = annualized drift (historical mean daily
+      log-return × 252)
+  σ = annualized EWMA volatility (recent days
+      weighted more heavily, λ = 0.94)
+  Z ~ N(0,1), drawn with antithetic pairing
+      (every Z is matched with a −Z path)
+  Δt = 1/252 (one trading day)`,
+  bootstrap:
+`Historical Bootstrap
+
+S(t+1) = S(t) · exp[ r_t ]
+
+  r_t drawn with replacement from the actual
+  pool of historical daily log-returns, instead
+  of an assumed distribution. Preserves real
+  fat tails, skew, and extreme-day frequency —
+  whatever shape the last 2 years actually had.`,
+  jump:
+`Merton Jump-Diffusion
+
+S(t+1) = S(t) · exp[ (μ − ½σ² − λk)·Δt
+                       + σ·√Δt·Z + N·Y ]
+
+  N ~ Bernoulli(λ·Δt)   jump indicator (this day)
+  Y ~ N(jump_mean, jump_std)   jump size if N=1
+  λ = 3/yr    average jump frequency
+  k = E[e^Y − 1]   compensator (keeps drift = μ)
+
+  Adds sudden, larger moves on top of ordinary
+  GBM diffusion — models crash/rally risk that
+  a pure normal distribution understates.`
+};
+function toggleFormula() {
+  const pre = document.getElementById('model-formula');
+  const isHidden = pre.classList.contains('hidden');
+  if (isHidden) pre.textContent = MODEL_FORMULAS[document.getElementById('sim-model').value] || '';
+  pre.classList.toggle('hidden');
+}
+
+// ---------- index quick picks ----------
+function quickPickIndex(ticker) {
+  tickerInput.value = ticker;
+  fetchLiveMarketData();
+}
+
+async function maybeShowNiftyBreakdown(resolvedTicker) {
+  const card = document.getElementById('nifty-breakdown-card');
+  if (resolvedTicker !== '^NSEI') { card.classList.add('hidden'); return; }
+  try {
+    const res = await fetchWithRetry(`${BACKEND_URL}/api/index/nifty50-breakdown`, { retries: 1, timeoutMs: 15000 });
+    if (!res.ok) { card.classList.add('hidden'); return; }
+    const data = await res.json();
+    const list = document.getElementById('nifty-breakdown-list');
+    const maxCount = Math.max(...data.by_industry.map(d => d.count));
+    list.innerHTML = data.by_industry.map(d => `
+      <div class="flex items-center gap-2">
+        <span class="w-24 truncate text-ink-600 text-[10px]">${d.industry}</span>
+        <div class="flex-1 h-2 bg-ink-700 rounded overflow-hidden">
+          <div class="h-full bg-cyan-500/70" style="width:${(d.count / maxCount * 100).toFixed(0)}%"></div>
+        </div>
+        <span class="text-white text-[10px] w-4 text-right">${d.count}</span>
+      </div>`).join('');
+    card.classList.remove('hidden');
+  } catch (e) {
+    card.classList.add('hidden'); // best-effort — don't block the main simulation on this
+  }
+}
+function buildStockURL(ticker, investment, horizon, simulations, model) {
+  return `${BACKEND_URL}/api/stock/${encodeURIComponent(ticker)}?investment=${investment}&horizon=${horizon}&simulations=${simulations}&model=${model}`;
+}
+
+async function fetchLiveMarketData() {
+  hideSuggestions();
+  clearError();
+  const ticker = tickerInput.value.trim().toUpperCase();
+  if (!ticker) { showError('Enter a ticker or company name first.'); return; }
+
+  const investment = parseFloat(document.getElementById('investment').value) || 100000;
+  const horizon = parseInt(document.getElementById('horizon').value);
+  const simulations = parseInt(document.getElementById('simulations').value);
+  const model = document.getElementById('sim-model').value;
+
+  if (compareOn) {
+    await fetchCompareData(ticker, investment, horizon, simulations);
+    return;
+  }
+
+  setLoading(true, `Fetching ${ticker} & running ${fmt0.format(simulations)} paths…`);
+  setStatus('SYNCING', true);
+
+  try {
+    const response = await fetchWithRetry(buildStockURL(ticker, investment, horizon, simulations, model));
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.detail || `Server responded ${response.status}`);
+    }
+    const data = await response.json();
+
+    currentCurrency = ccySymbol(data.currency);
+    document.getElementById('currency-sym').textContent = currentCurrency;
+
+    document.getElementById('co-name').textContent = `${data.company} (${data.ticker})`;
+    document.getElementById('co-meta').textContent = `${data.sector} · ${data.industry}`;
+    document.getElementById('company-card').classList.remove('hidden');
+
+    document.getElementById('mu').value = (data.expected_return * 100).toFixed(1);
+    document.getElementById('sigma').value = (data.volatility * 100).toFixed(1);
+    document.getElementById('mu-val').textContent = pct(data.expected_return);
+    document.getElementById('sigma-val').textContent = pct(data.volatility);
+
+    const modelLabel = data.model === 'bootstrap' ? 'Historical bootstrap' : 'GBM (EWMA vol)';
+    document.getElementById('main-title').textContent = `${data.company} — Monte Carlo Projection`;
+    document.getElementById('main-subtitle').textContent =
+      `${data.ticker} · ${modelLabel} · ${fmt0.format(simulations)} simulations · ${horizon} trading days`;
+
+    currentData = normalizeBackendData(data);
+    currentCompare = null;
+    document.getElementById('compare-panel').classList.add('hidden');
+    renderAll();
+    setStatus('LIVE', true);
+    updateShareURL();
+    maybeShowNiftyBreakdown(data.ticker);
+  } catch (err) {
+    console.error(err);
+    showError(err.message || 'Could not reach the simulation API. Check that the backend is running and reachable.');
+    setStatus('ERROR', false);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function fetchCompareData(ticker, investment, horizon, simulations) {
+  setLoading(true, `Running GBM + Bootstrap — ${fmt0.format(simulations)} paths each…`);
+  setStatus('COMPARING', true);
+  try {
+    const [gbmRes, bootRes] = await Promise.all([
+      fetchWithRetry(buildStockURL(ticker, investment, horizon, simulations, 'gbm')),
+      fetchWithRetry(buildStockURL(ticker, investment, horizon, simulations, 'bootstrap'))
+    ]);
+    if (!gbmRes.ok || !bootRes.ok) {
+      const bad = !gbmRes.ok ? gbmRes : bootRes;
+      const body = await bad.json().catch(() => ({}));
+      throw new Error(body.detail || `Server responded ${bad.status}`);
+    }
+    const gbmData = await gbmRes.json();
+    const bootData = await bootRes.json();
+
+    currentCurrency = ccySymbol(gbmData.currency);
+    document.getElementById('currency-sym').textContent = currentCurrency;
+
+    document.getElementById('co-name').textContent = `${gbmData.company} (${gbmData.ticker})`;
+    document.getElementById('co-meta').textContent = `${gbmData.sector} · ${gbmData.industry}`;
+    document.getElementById('company-card').classList.remove('hidden');
+
+    document.getElementById('main-title').textContent = `${gbmData.company} — Model Comparison`;
+    document.getElementById('main-subtitle').textContent =
+      `${gbmData.ticker} · GBM vs Bootstrap · ${fmt0.format(simulations)} simulations · ${horizon} trading days`;
+
+    currentCompare = {
+      gbm: normalizeBackendData(gbmData),
+      bootstrap: normalizeBackendData(bootData)
+    };
+    currentData = currentCompare.gbm;
+    document.getElementById('compare-panel').classList.remove('hidden');
+    document.getElementById('nifty-breakdown-card').classList.add('hidden');
+    renderAll();
+    setStatus('LIVE', true);
+    updateShareURL();
+  } catch (err) {
+    console.error(err);
+    showError(err.message || 'Could not reach the simulation API for one or both models.');
+    setStatus('ERROR', false);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function normalizeBackendData(data) {
+  return {
+    s0: data.current_price,
+    mu: data.expected_return,
+    sigma: data.volatility,
+    sigmaHistorical: data.volatility_historical,
+    sharpe: data.sharpe_ratio,
+    investment: data.investment,
+    expectedPortfolio: data.expected_portfolio,
+    portfolioStdError: data.portfolio_std_error,
+    portfolioCiLow: data.portfolio_ci95_low,
+    portfolioCiHigh: data.portfolio_ci95_high,
+    bestCase: data.best_case,
+    worstCase: data.worst_case,
+    probabilityProfit: data.probability_profit,
+    var95: data.var95,
+    var99: data.var99,
+    cvar95: data.cvar95,
+    drawdown: data.drawdown,
+    fan: data.fan_chart,
+    paths: data.sample_paths,
+    histogram: data.histogram,
+    percentiles: data.percentiles,
+    model: data.model
+  };
+}
+
+// ---------- manual override (client-side simulation) ----------
+function toggleOverride() {
+  if (compareOn) return; // mutually exclusive with compare mode
+  overrideOn = !overrideOn;
+  document.getElementById('override-toggle').classList.toggle('on', overrideOn);
+  document.getElementById('mu').disabled = !overrideOn;
+  document.getElementById('sigma').disabled = !overrideOn;
+  if (!overrideOn && currentData) {
+    renderAll();
+  }
+}
+function onOverrideSlider() {
+  document.getElementById('mu-val').textContent = document.getElementById('mu').value + '%';
+  document.getElementById('sigma-val').textContent = document.getElementById('sigma').value + '%';
+}
+
+// ---------- compare mode toggle ----------
+function toggleCompare() {
+  if (overrideOn) return; // mutually exclusive with override
+  compareOn = !compareOn;
+  document.getElementById('compare-toggle').classList.toggle('on', compareOn);
+  document.getElementById('sim-model').disabled = compareOn;
+  const overrideToggle = document.getElementById('override-toggle');
+  overrideToggle.classList.toggle('disabled', compareOn);
+  if (!compareOn) {
+    currentCompare = null;
+    document.getElementById('compare-panel').classList.add('hidden');
+  }
+}
+
+function runSimulation() {
+  clearError();
+  if (overrideOn) {
+    if (!currentData) { showError('Fetch a ticker first so there is a base price to simulate from.'); return; }
+    runClientSimulation();
+  } else {
+    fetchLiveMarketData();
+  }
+}
+
+function runClientSimulation() {
+  const s0 = currentData.s0;
+  const mu = parseFloat(document.getElementById('mu').value) / 100;
+  const sigma = parseFloat(document.getElementById('sigma').value) / 100;
+  const investment = parseFloat(document.getElementById('investment').value) || 100000;
+  const horizon = parseInt(document.getElementById('horizon').value);
+  let simulations = parseInt(document.getElementById('simulations').value);
+  simulations = Math.min(simulations, 20000); // keep in-browser runs responsive
+
+  setLoading(true, `Simulating ${fmt0.format(simulations)} custom paths…`);
+  setStatus('CUSTOM', true);
+
+  setTimeout(() => {
+    const result = gbmSimulate(s0, mu, sigma, horizon, simulations, investment);
+    currentData = result;
+    document.getElementById('main-subtitle').textContent =
+      `Custom scenario · μ ${pct(mu)} σ ${pct(sigma)} · ${fmt0.format(simulations)} simulations · ${horizon} days`;
+    renderAll();
+    setLoading(false);
+  }, 30);
+}
+
+function gbmSimulate(s0, mu, sigma, horizon, simulations, investment) {
+  const dt = 1 / 252;
+  const drift = (mu - 0.5 * sigma * sigma) * dt;
+  const vol = sigma * Math.sqrt(dt);
+
+  const paths = new Float64Array((horizon + 1) * simulations);
+  for (let s = 0; s < simulations; s++) paths[s] = s0;
+
+  const half = Math.floor(simulations / 2);
+  for (let t = 1; t <= horizon; t++) {
+    const rowPrev = (t - 1) * simulations;
+    const row = t * simulations;
+    for (let s = 0; s < half; s++) {
+      const u1 = Math.random() || 1e-9, u2 = Math.random();
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      paths[row + s] = paths[rowPrev + s] * Math.exp(drift + vol * z);
+      paths[row + half + s] = paths[rowPrev + half + s] * Math.exp(drift + vol * -z);
+    }
+    if (simulations % 2 === 1) {
+      const u1 = Math.random() || 1e-9, u2 = Math.random();
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      const last = simulations - 1;
+      paths[row + last] = paths[rowPrev + last] * Math.exp(drift + vol * z);
+    }
+  }
+
+  const finalPrices = paths.slice(horizon * simulations, (horizon + 1) * simulations);
+  const sortedFinal = Float64Array.from(finalPrices).sort();
+  const pctl = (p) => sortedFinal[Math.min(sortedFinal.length - 1, Math.floor(p * sortedFinal.length))];
+
+  const portfolio = Array.from(finalPrices, p => investment * (p / s0));
+  const sortedPortfolio = Float64Array.from(portfolio).sort();
+  const pPctl = (p) => sortedPortfolio[Math.min(sortedPortfolio.length - 1, Math.floor(p * sortedPortfolio.length))];
+
+  const var95 = pPctl(0.05) - investment;
+  const var99 = pPctl(0.01) - investment;
+  const cutoff95 = pPctl(0.05);
+  let sum95 = 0, n95 = 0;
+  for (const v of portfolio) if (v <= cutoff95) { sum95 += v; n95++; }
+  const cvar95 = (n95 ? sum95 / n95 : cutoff95) - investment;
+
+  const probProfit = (portfolio.filter(v => v > investment).length / portfolio.length) * 100;
+  const meanPortfolio = portfolio.reduce((a, b) => a + b, 0) / portfolio.length;
+  const variance = portfolio.reduce((a, b) => a + (b - meanPortfolio) ** 2, 0) / (portfolio.length - 1);
+  const stdError = Math.sqrt(variance / portfolio.length);
+  const sharpe = sigma ? (mu - RISK_FREE_RATE) / sigma : 0;
+
+  // fan chart (subsample days for perf on long horizons)
+  const fan = [];
+  const step = Math.max(1, Math.floor(horizon / 200));
+  const runningMax = new Float64Array(simulations).fill(s0);
+  const maxDrawdown = new Float64Array(simulations).fill(0);
+  for (let t = 0; t <= horizon; t++) {
+    const row = Array.from(paths.slice(t * simulations, (t + 1) * simulations));
+    for (let s = 0; s < simulations; s++) {
+      if (row[s] > runningMax[s]) runningMax[s] = row[s];
+      const dd = (runningMax[s] - row[s]) / runningMax[s] * 100;
+      if (dd > maxDrawdown[s]) maxDrawdown[s] = dd;
+    }
+    if (t % step === 0 || t === horizon) {
+      const sorted = row.slice().sort((a, b) => a - b);
+      const rp = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+      fan.push({ day: t, p5: rp(0.05), p25: rp(0.25), p50: rp(0.50), p75: rp(0.75), p95: rp(0.95) });
+    }
+  }
+
+  const sortedDD = Float64Array.from(maxDrawdown).sort();
+  const ddPctl = (p) => sortedDD[Math.min(sortedDD.length - 1, Math.floor(p * sortedDD.length))];
+  const drawdown = {
+    percentiles: { p50: ddPctl(0.5), p75: ddPctl(0.75), p90: ddPctl(0.9), p95: ddPctl(0.95), worst: sortedDD[sortedDD.length - 1] },
+    histogram: histogramOf(maxDrawdown, 25)
+  };
+
+  const sampleCount = Math.min(100, simulations);
+  const samplePaths = [];
+  for (let s = 0; s < sampleCount; s++) {
+    const arr = [];
+    for (let t = 0; t <= horizon; t++) arr.push(paths[t * simulations + s]);
+    samplePaths.push(arr);
+  }
+
+  const hist = histogramOf(finalPrices, 30);
+
+  return {
+    s0, mu, sigma, sigmaHistorical: null, sharpe, investment,
+    expectedPortfolio: meanPortfolio,
+    portfolioStdError: stdError,
+    portfolioCiLow: meanPortfolio - 1.96 * stdError,
+    portfolioCiHigh: meanPortfolio + 1.96 * stdError,
+    bestCase: Math.max(...portfolio),
+    worstCase: Math.min(...portfolio),
+    probabilityProfit: probProfit,
+    var95, var99, cvar95,
+    drawdown,
+    fan, paths: samplePaths, histogram: hist,
+    percentiles: { p5: pctl(0.05), p25: pctl(0.25), p50: pctl(0.50), p75: pctl(0.75), p95: pctl(0.95) },
+    model: 'custom'
+  };
+}
+
+function histogramOf(values, bins) {
+  const min = Math.min(...values), max = Math.max(...values);
+  const width = (max - min) / bins || 1;
+  const counts = new Array(bins).fill(0);
+  for (const v of values) {
+    let idx = Math.floor((v - min) / width);
+    if (idx >= bins) idx = bins - 1;
+    if (idx < 0) idx = 0;
+    counts[idx]++;
+  }
+  const edges = [];
+  for (let i = 0; i < bins; i++) edges.push(min + i * width);
+  return { bins: edges, counts };
+}
+
+// ---------- chart rendering ----------
+const plotlyLayoutBase = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { family: 'JetBrains Mono, monospace', color: '#8a93a6', size: 11 },
+  margin: { l: 56, r: 24, t: 16, b: 40 },
+  xaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', linecolor: '#212a3a' },
+  yaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', linecolor: '#212a3a' },
+  legend: { orientation: 'h', y: -0.18, font: { color: '#6b7688', size: 10 } },
+  hoverlabel: { bgcolor: '#10151f', bordercolor: '#212a3a', font: { family: 'JetBrains Mono, monospace', size: 11 } }
+};
+const plotlyConfig = { displayModeBar: false, responsive: true };
+
+function renderAll() {
+  document.getElementById('empty-state').classList.add('hidden');
+  if (compareOn && currentCompare) {
+    renderCompareMetrics(currentCompare);
+    renderPathsChart(currentCompare.gbm);
+    renderCompareFanChart(currentCompare.gbm, currentCompare.bootstrap);
+    renderCompareHistChart(currentCompare.gbm, currentCompare.bootstrap);
+    renderCompareDrawdownChart(currentCompare.gbm, currentCompare.bootstrap);
+  } else {
+    renderMetrics(currentData);
+    renderPathsChart(currentData);
+    renderFanChart(currentData);
+    renderHistChart(currentData);
+    renderDrawdownChart(currentData);
+  }
+}
+
+function renderMetrics(d) {
+  document.getElementById('metric-s0').textContent = money(d.s0);
+  document.getElementById('metric-mu').textContent = pct(d.mu);
+  document.getElementById('metric-sigma').textContent = pct(d.sigma);
+  document.getElementById('metric-sigma-hist').textContent =
+    (d.sigmaHistorical != null) ? `2y avg: ${pct(d.sigmaHistorical)}` : '';
+  document.getElementById('metric-sharpe').textContent = d.sharpe.toFixed(2);
+  document.getElementById('metric-mean').textContent = money(d.expectedPortfolio);
+  document.getElementById('metric-mean-ci').textContent =
+    (d.portfolioCiLow != null) ? `95% CI: ${money(d.portfolioCiLow)} – ${money(d.portfolioCiHigh)}` : '';
+  document.getElementById('metric-profit').textContent = d.probabilityProfit.toFixed(1) + '%';
+  document.getElementById('metric-var').textContent = `${money(d.var95)} / ${money(d.var99)}`;
+  document.getElementById('metric-cvar').textContent = money(d.cvar95);
+  document.getElementById('metric-best').textContent = money(d.bestCase);
+  document.getElementById('metric-worst').textContent = money(d.worstCase);
+  document.getElementById('metric-dd-median').textContent = pctVal(d.drawdown.percentiles.p50);
+  document.getElementById('metric-dd-95').textContent = pctVal(d.drawdown.percentiles.p95);
+
+  document.getElementById('metric-mu').className = 'text-xl font-bold font-mono mt-1 ' + (d.mu >= 0 ? 'text-gain' : 'text-loss');
+}
+
+function renderCompareMetrics(cmp) {
+  renderMetrics(cmp.gbm); // primary readout uses GBM
+  document.getElementById('cmp-mean-gbm').textContent = money(cmp.gbm.expectedPortfolio);
+  document.getElementById('cmp-mean-boot').textContent = money(cmp.bootstrap.expectedPortfolio);
+  document.getElementById('cmp-profit-gbm').textContent = cmp.gbm.probabilityProfit.toFixed(1) + '%';
+  document.getElementById('cmp-profit-boot').textContent = cmp.bootstrap.probabilityProfit.toFixed(1) + '%';
+  document.getElementById('cmp-var-gbm').textContent = money(cmp.gbm.var95);
+  document.getElementById('cmp-var-boot').textContent = money(cmp.bootstrap.var95);
+  document.getElementById('cmp-cvar-gbm').textContent = money(cmp.gbm.cvar95);
+  document.getElementById('cmp-cvar-boot').textContent = money(cmp.bootstrap.cvar95);
+  document.getElementById('cmp-dd-gbm').textContent = pctVal(cmp.gbm.drawdown.percentiles.p50);
+  document.getElementById('cmp-dd-boot').textContent = pctVal(cmp.bootstrap.drawdown.percentiles.p50);
+}
+
+function renderPathsChart(d) {
+  const traces = d.paths.map((p, i) => ({
+    y: p,
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: 'rgba(34,211,238,0.10)', width: 1 },
+    hoverinfo: 'skip',
+    showlegend: false
+  }));
+  const meanPath = d.paths[0].map((_, t) => d.paths.reduce((a, p) => a + p[t], 0) / d.paths.length);
+  traces.push({
+    y: meanPath, type: 'scatter', mode: 'lines', name: 'Mean path',
+    line: { color: '#22d3ee', width: 2.5 }
+  });
+  traces.push({
+    y: [d.s0], x: [0], type: 'scatter', mode: 'markers', name: 'Start',
+    marker: { color: '#fbbf24', size: 7 }, showlegend: false
+  });
+
+  Plotly.newPlot('chart-paths', traces, {
+    ...plotlyLayoutBase,
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Trading day' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Price' }
+  }, plotlyConfig);
+}
+
+function renderFanChart(d) {
+  const days = d.fan.map(f => f.day);
+  const p5 = d.fan.map(f => f.p5), p25 = d.fan.map(f => f.p25);
+  const p50 = d.fan.map(f => f.p50), p75 = d.fan.map(f => f.p75), p95 = d.fan.map(f => f.p95);
+
+  const traces = [
+    { x: days, y: p95, type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
+    { x: days, y: p5, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(34,211,238,0.08)', line: { width: 0 }, name: '5th–95th pct' },
+    { x: days, y: p75, type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
+    { x: days, y: p25, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(34,211,238,0.20)', line: { width: 0 }, name: '25th–75th pct' },
+    { x: days, y: p50, type: 'scatter', mode: 'lines', line: { color: '#22d3ee', width: 2.5 }, name: 'Median' }
+  ];
+
+  Plotly.newPlot('chart-fan', traces, {
+    ...plotlyLayoutBase,
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Trading day' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Price' }
+  }, plotlyConfig);
+}
+
+function renderCompareFanChart(gbm, boot) {
+  const gDays = gbm.fan.map(f => f.day), bDays = boot.fan.map(f => f.day);
+  const traces = [
+    { x: gDays, y: gbm.fan.map(f => f.p95), type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
+    { x: gDays, y: gbm.fan.map(f => f.p5), type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(34,211,238,0.12)', line: { width: 0 }, name: 'GBM 5th–95th' },
+    { x: gDays, y: gbm.fan.map(f => f.p50), type: 'scatter', mode: 'lines', line: { color: '#22d3ee', width: 2.5 }, name: 'GBM median' },
+    { x: bDays, y: boot.fan.map(f => f.p95), type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
+    { x: bDays, y: boot.fan.map(f => f.p5), type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(216,90,48,0.12)', line: { width: 0 }, name: 'Bootstrap 5th–95th' },
+    { x: bDays, y: boot.fan.map(f => f.p50), type: 'scatter', mode: 'lines', line: { color: '#d85a30', width: 2.5, dash: 'dot' }, name: 'Bootstrap median' }
+  ];
+  Plotly.newPlot('chart-fan', traces, {
+    ...plotlyLayoutBase,
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Trading day' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Price' }
+  }, plotlyConfig);
+}
+
+function renderHistChart(d) {
+  const trace = {
+    x: d.histogram.bins, y: d.histogram.counts, type: 'bar',
+    marker: { color: '#22d3ee', opacity: 0.55, line: { color: '#22d3ee', width: 0.5 } },
+    name: 'Final price distribution'
+  };
+  const shapes = [
+    { type: 'line', x0: d.s0, x1: d.s0, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dot' } },
+    { type: 'line', x0: d.percentiles.p50, x1: d.percentiles.p50, y0: 0, y1: 1, yref: 'paper', line: { color: '#34d399', width: 1.5, dash: 'dot' } },
+    { type: 'line', x0: d.percentiles.p5, x1: d.percentiles.p5, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dot' } }
+  ];
+  Plotly.newPlot('chart-hist', [trace], {
+    ...plotlyLayoutBase,
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Final price' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Frequency' },
+    shapes
+  }, plotlyConfig);
+}
+
+function renderCompareHistChart(gbm, boot) {
+  const traces = [
+    { x: gbm.histogram.bins, y: gbm.histogram.counts, type: 'bar', name: 'GBM', marker: { color: '#22d3ee', opacity: 0.55 } },
+    { x: boot.histogram.bins, y: boot.histogram.counts, type: 'bar', name: 'Bootstrap', marker: { color: '#d85a30', opacity: 0.55 } }
+  ];
+  Plotly.newPlot('chart-hist', traces, {
+    ...plotlyLayoutBase,
+    barmode: 'overlay',
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Final price' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Frequency' }
+  }, plotlyConfig);
+}
+
+function renderDrawdownChart(d) {
+  const trace = {
+    x: d.drawdown.histogram.bins, y: d.drawdown.histogram.counts, type: 'bar',
+    marker: { color: '#fbbf24', opacity: 0.55, line: { color: '#fbbf24', width: 0.5 } },
+    name: 'Max drawdown per path'
+  };
+  const shapes = [
+    { type: 'line', x0: d.drawdown.percentiles.p50, x1: d.drawdown.percentiles.p50, y0: 0, y1: 1, yref: 'paper', line: { color: '#34d399', width: 1.5, dash: 'dot' } },
+    { type: 'line', x0: d.drawdown.percentiles.p95, x1: d.drawdown.percentiles.p95, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dot' } }
+  ];
+  Plotly.newPlot('chart-dd', [trace], {
+    ...plotlyLayoutBase,
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Max drawdown (%)' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Number of paths' },
+    shapes
+  }, plotlyConfig);
+}
+
+function renderCompareDrawdownChart(gbm, boot) {
+  const traces = [
+    { x: gbm.drawdown.histogram.bins, y: gbm.drawdown.histogram.counts, type: 'bar', name: 'GBM', marker: { color: '#22d3ee', opacity: 0.55 } },
+    { x: boot.drawdown.histogram.bins, y: boot.drawdown.histogram.counts, type: 'bar', name: 'Bootstrap', marker: { color: '#d85a30', opacity: 0.55 } }
+  ];
+  Plotly.newPlot('chart-dd', traces, {
+    ...plotlyLayoutBase,
+    barmode: 'overlay',
+    xaxis: { ...plotlyLayoutBase.xaxis, title: 'Max drawdown (%)' },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Number of paths' }
+  }, plotlyConfig);
+}
+
+// ---------- tabs ----------
+function switchTab(tab) {
+  activeTab = tab;
+  ['paths', 'fan', 'hist', 'dd'].forEach(t => {
+    document.getElementById(`tab-${t}`).className = `px-4 py-3 text-xs font-mono whitespace-nowrap focus:outline-none ${t === tab ? 'tab-active' : 'tab-inactive'}`;
+    const chart = document.getElementById(`chart-${t}`);
+    chart.classList.toggle('opacity-0', t !== tab);
+    chart.classList.toggle('pointer-events-none', t !== tab);
+  });
+  if (currentData) Plotly.Plots.resize(document.getElementById(`chart-${tab}`));
+}
+
+// ---------- export ----------
+function exportPNG() {
+  if (!currentData) { showError('Run a simulation before exporting.'); return; }
+  Plotly.downloadImage(`chart-${activeTab}`, { format: 'png', filename: `monte-carlo-${activeTab}`, width: 1280, height: 720 });
+}
+function exportCSV() {
+  if (!currentData) { showError('Run a simulation before exporting.'); return; }
+  let rows = [];
+  if (activeTab === 'hist') {
+    rows.push(['bin_start', 'count']);
+    currentData.histogram.bins.forEach((b, i) => rows.push([b.toFixed(2), currentData.histogram.counts[i]]));
+  } else if (activeTab === 'dd') {
+    rows.push(['drawdown_pct_start', 'count']);
+    currentData.drawdown.histogram.bins.forEach((b, i) => rows.push([b.toFixed(2), currentData.drawdown.histogram.counts[i]]));
+  } else {
+    rows.push(['day', 'p5', 'p25', 'p50', 'p75', 'p95']);
+    currentData.fan.forEach(f => rows.push([f.day, f.p5.toFixed(2), f.p25.toFixed(2), f.p50.toFixed(2), f.p75.toFixed(2), f.p95.toFixed(2)]));
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `monte-carlo-${activeTab}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---------- shareable scenario URL ----------
+function currentParams() {
+  return {
+    ticker: tickerInput.value.trim().toUpperCase(),
+    investment: document.getElementById('investment').value,
+    horizon: document.getElementById('horizon').value,
+    simulations: document.getElementById('simulations').value,
+    model: document.getElementById('sim-model').value,
+    compare: compareOn ? '1' : '0'
+  };
+}
+function updateShareURL() {
+  const p = currentParams();
+  const usp = new URLSearchParams(p);
+  history.replaceState(null, '', '?' + usp.toString());
+}
+async function shareScenario() {
+  updateShareURL();
+  const url = window.location.href;
+  const btn = document.getElementById('share-btn');
+  try {
+    await navigator.clipboard.writeText(url);
+    const original = btn.innerHTML;
+    btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Copied';
+    setTimeout(() => { btn.innerHTML = original; }, 1800);
+  } catch (e) {
+    showError('Could not copy link — copy it from the address bar instead.');
+  }
+}
+function applyURLParams() {
+  const usp = new URLSearchParams(window.location.search);
+  if (![...usp.keys()].length) return false;
+  if (usp.get('ticker')) tickerInput.value = usp.get('ticker');
+  if (usp.get('investment')) document.getElementById('investment').value = usp.get('investment');
+  if (usp.get('horizon')) document.getElementById('horizon').value = usp.get('horizon');
+  if (usp.get('simulations')) {
+    document.getElementById('simulations').value = usp.get('simulations');
+    document.getElementById('sims-val').textContent = fmt0.format(parseInt(usp.get('simulations')));
+  }
+  if (usp.get('model')) document.getElementById('sim-model').value = usp.get('model');
+  if (usp.get('compare') === '1') toggleCompare();
+  return true;
+}
+
+// ---------- init ----------
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('simulations').addEventListener('change', (e) => {
+    document.getElementById('sims-val').textContent = fmt0.format(parseInt(e.target.value));
+  });
+  document.getElementById('sim-model').addEventListener('change', (e) => {
+    document.getElementById('model-hint').textContent = e.target.value === 'bootstrap'
+      ? 'Resamples actual historical daily returns — keeps real fat tails & skew, no normality assumption.'
+      : e.target.value === 'jump'
+      ? 'GBM diffusion plus occasional sudden jumps — models crash/rally risk.'
+      : 'Normal shocks scaled by a volatility that reacts to recent turbulence.';
+    const pre = document.getElementById('model-formula');
+    if (!pre.classList.contains('hidden')) pre.textContent = MODEL_FORMULAS[e.target.value] || '';
+  });
+  setStatus('OFFLINE', false);
+  applyURLParams();
+  fetchLiveMarketData();
+});
+</script>
 </body>
 </html>
