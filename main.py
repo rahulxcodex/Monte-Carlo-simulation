@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import requests
 import io
+import os
 import time
 import threading
 from collections import Counter
@@ -114,50 +115,202 @@ def ewma_daily_vol(returns:np.ndarray, lam:float=EWMA_LAMBDA)->float:
 # the cache, and a previous successful cache is kept rather than wiped.
 # ---------------------------------------------------------------------------
 
-_NSE_HEADERS={
-    "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language":"en-US,en;q=0.9",
-    "Referer":"https://www.nseindia.com/market-data/live-equity-market"
+_NSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive"
 }
 
-def _fetch_nse_csv(path:str)->str:
+# Cloud server IPs (AWS/HF Spaces) get aggressively WAF blocked by NSE.
+# This fallback ensures the core Nifty 50 data & breakdown endpoint ALWAYS works.
+_FALLBACK_NIFTY50 = [
+    {"name": "Adani Enterprises", "ticker": "ADANIENT.NS", "industry": "Metals & Mining"},
+    {"name": "Adani Ports", "ticker": "ADANIPORTS.NS", "industry": "Services"},
+    {"name": "Apollo Hospitals", "ticker": "APOLLOHOSP.NS", "industry": "Healthcare"},
+    {"name": "Asian Paints", "ticker": "ASIANPAINT.NS", "industry": "Consumer Durables"},
+    {"name": "Axis Bank", "ticker": "AXISBANK.NS", "industry": "Financial Services"},
+    {"name": "Bajaj Auto", "ticker": "BAJAJ-AUTO.NS", "industry": "Automobile and Auto Components"},
+    {"name": "Bajaj Finance", "ticker": "BAJFINANCE.NS", "industry": "Financial Services"},
+    {"name": "Bajaj Finserv", "ticker": "BAJAJFINSV.NS", "industry": "Financial Services"},
+    {"name": "BPCL", "ticker": "BPCL.NS", "industry": "Oil Gas & Consumable Fuels"},
+    {"name": "Bharti Airtel", "ticker": "BHARTIARTL.NS", "industry": "Telecommunication"},
+    {"name": "Britannia", "ticker": "BRITANNIA.NS", "industry": "Fast Moving Consumer Goods"},
+    {"name": "Cipla", "ticker": "CIPLA.NS", "industry": "Healthcare"},
+    {"name": "Coal India", "ticker": "COALINDIA.NS", "industry": "Oil Gas & Consumable Fuels"},
+    {"name": "Divi's Labs", "ticker": "DIVISLAB.NS", "industry": "Healthcare"},
+    {"name": "Dr. Reddy's", "ticker": "DRREDDY.NS", "industry": "Healthcare"},
+    {"name": "Eicher Motors", "ticker": "EICHERMOT.NS", "industry": "Automobile and Auto Components"},
+    {"name": "Grasim", "ticker": "GRASIM.NS", "industry": "Construction Materials"},
+    {"name": "HCL Tech", "ticker": "HCLTECH.NS", "industry": "Information Technology"},
+    {"name": "HDFC Bank", "ticker": "HDFCBANK.NS", "industry": "Financial Services"},
+    {"name": "HDFC Life", "ticker": "HDFCLIFE.NS", "industry": "Financial Services"},
+    {"name": "Hero MotoCorp", "ticker": "HEROMOTOCO.NS", "industry": "Automobile and Auto Components"},
+    {"name": "Hindalco", "ticker": "HINDALCO.NS", "industry": "Metals & Mining"},
+    {"name": "Hindustan Unilever", "ticker": "HINDUNILVR.NS", "industry": "Fast Moving Consumer Goods"},
+    {"name": "ICICI Bank", "ticker": "ICICIBANK.NS", "industry": "Financial Services"},
+    {"name": "ITC", "ticker": "ITC.NS", "industry": "Fast Moving Consumer Goods"},
+    {"name": "IndusInd Bank", "ticker": "INDUSINDBK.NS", "industry": "Financial Services"},
+    {"name": "Infosys", "ticker": "INFY.NS", "industry": "Information Technology"},
+    {"name": "JSW Steel", "ticker": "JSWSTEEL.NS", "industry": "Metals & Mining"},
+    {"name": "Kotak Mahindra Bank", "ticker": "KOTAKBANK.NS", "industry": "Financial Services"},
+    {"name": "Larsen & Toubro", "ticker": "LT.NS", "industry": "Construction"},
+    {"name": "LTIMindtree", "ticker": "LTIM.NS", "industry": "Information Technology"},
+    {"name": "Mahindra & Mahindra", "ticker": "M&M.NS", "industry": "Automobile and Auto Components"},
+    {"name": "Maruti Suzuki", "ticker": "MARUTI.NS", "industry": "Automobile and Auto Components"},
+    {"name": "NTPC", "ticker": "NTPC.NS", "industry": "Power"},
+    {"name": "Nestle India", "ticker": "NESTLEIND.NS", "industry": "Fast Moving Consumer Goods"},
+    {"name": "ONGC", "ticker": "ONGC.NS", "industry": "Oil Gas & Consumable Fuels"},
+    {"name": "Power Grid", "ticker": "POWERGRID.NS", "industry": "Power"},
+    {"name": "Reliance Industries", "ticker": "RELIANCE.NS", "industry": "Oil Gas & Consumable Fuels"},
+    {"name": "SBI Life Insurance", "ticker": "SBILIFE.NS", "industry": "Financial Services"},
+    {"name": "State Bank of India", "ticker": "SBIN.NS", "industry": "Financial Services"},
+    {"name": "Sun Pharma", "ticker": "SUNPHARMA.NS", "industry": "Healthcare"},
+    {"name": "TCS", "ticker": "TCS.NS", "industry": "Information Technology"},
+    {"name": "Tata Consumer Products", "ticker": "TATACONSUM.NS", "industry": "Fast Moving Consumer Goods"},
+    {"name": "Tata Motors", "ticker": "TATAMOTORS.NS", "industry": "Automobile and Auto Components"},
+    {"name": "Tata Steel", "ticker": "TATASTEEL.NS", "industry": "Metals & Mining"},
+    {"name": "Tech Mahindra", "ticker": "TECHM.NS", "industry": "Information Technology"},
+    {"name": "Titan Company", "ticker": "TITAN.NS", "industry": "Consumer Durables"},
+    {"name": "UPL", "ticker": "UPL.NS", "industry": "Chemicals"},
+    {"name": "UltraTech Cement", "ticker": "ULTRACEMCO.NS", "industry": "Construction Materials"},
+    {"name": "Wipro", "ticker": "WIPRO.NS", "industry": "Information Technology"}
+]
+
+def _fetch_nse_csv(path:str) -> str:
     with requests.Session() as s:
         s.headers.update(_NSE_HEADERS)
-        s.get("https://www.nseindia.com", timeout=8)  # warm-up: sets cookies NSE requires
-        r=s.get(f"https://nsearchives.nseindia.com/content/{path}", timeout=15)
-        r.raise_for_status()
-        return r.text
+        
+        # 1. Warm-up request to establish routing cookies required by NSE
+        try:
+            s.get("https://www.nseindia.com", timeout=5)
+        except Exception:
+            pass
+        
+        # 2. Add an explicit referer right before requesting the data file
+        s.headers.update({"Referer": "https://www.nseindia.com/"})
+        
+        # 3. Try to fetch from archives, fallback to nsearchives if blocked
+        try:
+            r = s.get(f"https://archives.nseindia.com/content/{path}", timeout=10)
+            r.raise_for_status()
+            return r.text
+        except Exception:
+            r2 = s.get(f"https://nsearchives.nseindia.com/content/{path}", timeout=10)
+            r2.raise_for_status()
+            return r2.text
 
 def _build_nse_equity_list()->list:
-    text=_fetch_nse_csv("equities/EQUITY_L.csv")
-    df=pd.read_csv(io.StringIO(text))
     out=[]
-    for _,row in df.iterrows():
-        sym=str(row.get("SYMBOL","")).strip()
-        name=str(row.get("NAME OF COMPANY","")).strip()
-        if not sym or not name:
-            continue
-        out.append({"name":name,"ticker":f"{sym}.NS","exchange":"NSE","type":"stock"})
-    return out
+    try:
+        text=_fetch_nse_csv("equities/EQUITY_L.csv")
+        df=pd.read_csv(io.StringIO(text))
+        for _,row in df.iterrows():
+            sym=str(row.get("SYMBOL","")).strip()
+            name=str(row.get("NAME OF COMPANY","")).strip()
+            if not sym or not name:
+                continue
+            out.append({"name":name,"ticker":f"{sym}.NS","exchange":"NSE","type":"stock"})
+        if out:
+            return out
+    except Exception as e:
+        print(f"[ticker cache] NSE WAF Blocked full equity list ({e}). Trying Kite fallback...")
+
+    # Fallback 1: Zerodha Kite's public instrument dump (No WAF block for cloud IPs)
+    try:
+        r = requests.get("https://api.kite.trade/instruments/NSE", timeout=15)
+        r.raise_for_status()
+        df = pd.read_csv(io.StringIO(r.text))
+        
+        # Filter for regular equities (EQ) to exclude options/futures
+        if 'instrument_type' in df.columns:
+            df = df[df['instrument_type'] == 'EQ']
+            
+        for _, row in df.iterrows():
+            sym = str(row.get("tradingsymbol", "")).strip()
+            name = str(row.get("name", "")).strip()
+            if not name or name == 'nan':
+                name = sym
+            if not sym:
+                continue
+            out.append({"name": name, "ticker": f"{sym}.NS", "exchange": "NSE", "type": "stock"})
+            
+        if out:
+            print(f"[ticker cache] Successfully loaded {len(out)} NSE stocks via Kite API fallback.")
+            return out
+    except Exception as e2:
+        print(f"[ticker cache] Kite fallback failed ({e2}). Trying local file fallback...")
+
+    # Fallback 2: Local CSV file (if manually downloaded by user)
+    if os.path.exists("EQUITY_L.csv"):
+        try:
+            df=pd.read_csv("EQUITY_L.csv")
+            for _,row in df.iterrows():
+                sym=str(row.get("SYMBOL","")).strip()
+                name=str(row.get("NAME OF COMPANY","")).strip()
+                if not sym or not name:
+                    continue
+                out.append({"name":name,"ticker":f"{sym}.NS","exchange":"NSE","type":"stock"})
+            print(f"[ticker cache] Successfully loaded {len(out)} NSE stocks via local EQUITY_L.csv.")
+            return out
+        except Exception as e3:
+            print(f"[ticker cache] Local file parsing failed ({e3}).")
+
+    return []
 
 def _build_nifty50_list()->list:
-    text=_fetch_nse_csv("indices/ind_nifty50list.csv")
-    df=pd.read_csv(io.StringIO(text))
     out=[]
-    for _,row in df.iterrows():
-        sym=str(row.get("Symbol","")).strip()
-        name=str(row.get("Company Name","")).strip()
-        industry=str(row.get("Industry","Other")).strip()
-        if not sym or not name:
-            continue
-        out.append({"name":name,"ticker":f"{sym}.NS","industry":industry,"exchange":"NSE","type":"index_constituent"})
+    try:
+        text=_fetch_nse_csv("indices/ind_nifty50list.csv")
+        df=pd.read_csv(io.StringIO(text))
+        for _,row in df.iterrows():
+            sym=str(row.get("Symbol","")).strip()
+            name=str(row.get("Company Name","")).strip()
+            industry=str(row.get("Industry","Other")).strip()
+            if not sym or not name:
+                continue
+            out.append({"name":name,"ticker":f"{sym}.NS","industry":industry,"exchange":"NSE","type":"index_constituent"})
+        if out: 
+            return out
+    except Exception as e:
+        print(f"[ticker cache] NSE WAF Blocked Nifty 50 live fetch ({e}). Trying local file...")
+    
+    # Try local file if user manually downloaded it
+    if os.path.exists("ind_nifty50list.csv"):
+        try:
+            df=pd.read_csv("ind_nifty50list.csv")
+            for _,row in df.iterrows():
+                sym=str(row.get("Symbol","")).strip()
+                name=str(row.get("Company Name","")).strip()
+                industry=str(row.get("Industry","Other")).strip()
+                if not sym or not name:
+                    continue
+                out.append({"name":name,"ticker":f"{sym}.NS","industry":industry,"exchange":"NSE","type":"index_constituent"})
+            if out:
+                print(f"[ticker cache] Successfully loaded Nifty 50 via local ind_nifty50list.csv.")
+                return out
+        except Exception as e:
+            print(f"[ticker cache] Local file parsing failed ({e}). Engaging Hardcoded Fallback.")
+    else:
+        print(f"[ticker cache] Engaging Nifty 50 Hardcoded Fallback.")
+
+    # Cloud server IP is blocked, inject the robust hardcoded fallback!
+    for c in _FALLBACK_NIFTY50:
+        out.append({
+            "name": c["name"],
+            "ticker": c["ticker"],
+            "industry": c["industry"],
+            "exchange": "NSE",
+            "type": "index_constituent"
+        })
     return out
 
 def _build_crypto_list(limit:int=250)->list:
     r=requests.get(
         "https://api.coingecko.com/api/v3/coins/markets",
         params={"vs_currency":"usd","order":"market_cap_desc","per_page":limit,"page":1},
-        headers={"User-Agent":"Mozilla/5.0"},
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
         timeout=15
     )
     r.raise_for_status()
@@ -187,13 +340,13 @@ def refresh_ticker_cache(force:bool=False):
         try:
             combined.extend(_build_nse_equity_list())
         except Exception as e:
-            print(f"[ticker cache] NSE equity list failed: {e}")
+            pass
 
         try:
             nifty50=_build_nifty50_list()
             combined.extend(nifty50)
         except Exception as e:
-            print(f"[ticker cache] Nifty 50 list failed: {e}")
+            pass
 
         try:
             combined.extend(_build_crypto_list())
