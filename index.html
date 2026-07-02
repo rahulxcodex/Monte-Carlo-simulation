@@ -212,6 +212,10 @@
         <button onclick="signInGoogle()" class="w-full py-2 rounded border border-ink-600 hover:border-cyan-500/50 text-white text-sm font-mono transition-colors">
           Continue with Google
         </button>
+        <button onclick="continueAsGuest()" class="w-full py-2 rounded text-ink-600 hover:text-cyan-400 text-xs font-mono uppercase tracking-wider transition-colors">
+          Continue as Guest →
+        </button>
+        <p class="text-[10px] text-ink-600 font-mono text-center leading-relaxed">Guest mode lets you run simulations without an account. Sign in anytime to save scenarios &amp; watchlist alerts.</p>
       </div>
     </div>
   </div>
@@ -231,7 +235,7 @@
       </h1>
       <div class="flex items-center justify-between text-[10px] font-mono text-ink-600 mb-4 -mt-2">
         <span id="user-email-chip" class="truncate max-w-[12rem]"></span>
-        <button onclick="doSignOut()" class="uppercase tracking-wider hover:text-cyan-400 transition-colors">Sign Out</button>
+        <button onclick="doSignOut()" id="sign-out-btn" class="uppercase tracking-wider hover:text-cyan-400 transition-colors">Sign Out</button>
       </div>
       
       <div class="flex rounded-md bg-ink-800 p-1 border border-ink-600">
@@ -686,7 +690,37 @@ async function signInGoogle() {
 }
 
 async function doSignOut() {
+  if (isGuest) {
+    // Guest mode has no Firebase session to end — just send them back to
+    // the auth overlay so they can sign in (or re-enter guest mode).
+    isGuest = false;
+    currentUid = null;
+    document.getElementById('auth-overlay').classList.remove('hidden');
+    document.getElementById('user-email-chip').textContent = '';
+    refreshScenarioList();
+    refreshWatchlistList();
+    return;
+  }
   try { await window.__auth.signOut(); } catch (err) { console.error(err); }
+}
+
+// Lets someone explore the dashboard and run simulations without creating
+// an account. Guest mode never touches Firestore (currentUid stays null),
+// so Save Scenario / watchlist alerts continue to prompt for sign-in —
+// only read-only-from-the-user's-perspective simulation features work.
+function continueAsGuest() {
+  isGuest = true;
+  currentUid = null;
+  document.getElementById('auth-overlay').classList.add('hidden');
+  document.getElementById('user-email-chip').textContent = 'Guest — sign in to save';
+  document.getElementById('sign-out-btn').textContent = 'Sign In';
+  refreshScenarioList();
+  refreshWatchlistList();
+  if (!appBooted) {
+    appBooted = true;
+    setAppMode('single');
+    if (applySharedParamsFromURL()) runMatrix();
+  }
 }
 
 function friendlyAuthError(err) {
@@ -709,12 +743,15 @@ function friendlyAuthError(err) {
 // a signed-in user, and the app only initializes once, the first time a user
 // is seen.
 let appBooted = false;
+let isGuest = false;
 window.addEventListener('authchange', (e) => {
   const user = e.detail.user;
   const overlay = document.getElementById('auth-overlay');
   if (user) {
+    isGuest = false;
     overlay.classList.add('hidden');
     document.getElementById('user-email-chip').textContent = user.email || user.displayName || 'Signed in';
+    document.getElementById('sign-out-btn').textContent = 'Sign Out';
     currentUid = user.uid;
     refreshScenarioList();
     refreshWatchlistList().then(() => checkWatchlist());
@@ -726,6 +763,9 @@ window.addEventListener('authchange', (e) => {
       if (applySharedParamsFromURL()) runMatrix();
     }
   } else {
+    // Don't yank an active guest session back to the overlay — this branch
+    // only re-shows it for a real (non-guest) signed-out state.
+    if (isGuest) return;
     overlay.classList.remove('hidden');
     document.getElementById('auth-email').value = '';
     document.getElementById('auth-password').value = '';
