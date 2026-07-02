@@ -1,3 +1,4 @@
+
 <!DOCTYPE html><html lang="en" class="dark"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PRO-SIM · Monte Carlo & Portfolio Terminal</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -92,6 +93,25 @@
     },
     remove: async (uid, id) => {
       await deleteDoc(doc(db, 'users', uid, 'watchlist', id));
+    }
+  };
+
+  // Per-user portfolio holdings (ticker + quantity held + average buy price),
+  // stored at users/{uid}/holdings/{autoId}. This backs the "My Holdings"
+  // homepage where a user tracks real positions and their live performance.
+  window.__holdings = {
+    save: async (uid, item) => {
+      const ref = doc(collection(db, 'users', uid, 'holdings'));
+      await setDoc(ref, { ...item, createdAt: serverTimestamp() });
+      return ref.id;
+    },
+    list: async (uid) => {
+      const q = query(collection(db, 'users', uid, 'holdings'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+    remove: async (uid, id) => {
+      await deleteDoc(doc(db, 'users', uid, 'holdings', id));
     }
   };
 
@@ -239,13 +259,19 @@
       </div>
       
       <div class="flex rounded-md bg-ink-800 p-1 border border-ink-600">
+        <button onclick="setAppMode('holdings')" id="btn-mode-holdings" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏠 Home</button>
         <button onclick="setAppMode('single')" id="btn-mode-single" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single Asset</button>
         <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
       </div>
     </div>
 
     <div class="p-5 flex flex-col gap-6 relative">
-      
+
+      <!-- Simulator-only controls (search box, params, run button) — hidden
+           on the Home/My Holdings page, which has its own add-holding form
+           in the main panel instead. -->
+      <div id="sidebar-sim-controls" class="flex flex-col gap-6">
+
       <!-- Universal Search Box -->
       <div class="relative z-30">
         <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono" id="search-label" for="ticker">Ticker / Company</label>
@@ -397,6 +423,8 @@
       </div>
       <div id="error-message" class="hidden text-xs text-loss bg-loss/10 p-2.5 rounded border border-loss/30 font-mono leading-relaxed"></div>
 
+      </div><!-- /#sidebar-sim-controls -->
+
       <hr class="border-ink-600">
 
       <!-- Save / Load Scenarios (Firestore, per signed-in user) -->
@@ -429,8 +457,11 @@
         </div>
 
         <div class="space-y-1.5 mb-2">
-          <input type="text" id="watchlist-ticker" placeholder="Ticker (e.g. AAPL, RELIANCE)"
-            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          <div class="relative z-20">
+            <input type="text" id="watchlist-ticker" autocomplete="off" placeholder="Ticker or company name…"
+              class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <div id="watchlist-suggest-box" class="hidden absolute mt-1 w-full glass-strong rounded-lg shadow-2xl overflow-hidden max-h-56 overflow-y-auto border border-ink-600"></div>
+          </div>
           <div class="flex gap-1.5">
             <select id="watchlist-metric" class="flex-1 px-2 py-2 bg-ink-800 border border-ink-600 rounded text-white text-xs font-mono focus:outline-none focus:border-cyan-500">
               <option value="var95">VaR 95%</option>
@@ -601,6 +632,88 @@
       </div>
     </div>
 
+    <!-- ================= MY HOLDINGS (HOMEPAGE) VIEW ================= -->
+    <div id="view-holdings" class="hidden flex-col h-full">
+
+      <!-- Add Holding Form -->
+      <div class="glass p-4 rounded-lg mb-4">
+        <p class="text-[11px] uppercase tracking-wider text-ink-600 mb-2 font-mono">Add a Holding</p>
+        <div class="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-start">
+          <div class="relative z-20">
+            <input type="text" id="holding-ticker" autocomplete="off" placeholder="Ticker or company name…"
+              class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono uppercase">
+            <div id="holding-suggest-box" class="hidden absolute mt-1 w-full glass-strong rounded-lg shadow-2xl overflow-hidden max-h-56 overflow-y-auto border border-ink-600"></div>
+          </div>
+          <input type="number" id="holding-qty" placeholder="Quantity" min="0" step="any"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          <input type="number" id="holding-avgprice" placeholder="Avg. buy price" min="0" step="any"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          <button onclick="addHolding()" id="holding-add-btn"
+            class="bg-cyan-600 hover:bg-cyan-500 text-ink-950 px-4 py-2 rounded transition-colors shrink-0 text-xs font-mono font-bold uppercase tracking-wider">
+            Add
+          </button>
+        </div>
+        <p class="text-[10px] text-ink-600 font-mono mt-2">Avg. buy price is per unit, in the asset's own currency (e.g. USD for AAPL, INR for RELIANCE.NS).</p>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="glass p-4 rounded-lg">
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Invested</p>
+          <p id="hold-invested" class="text-xl font-bold font-mono text-white mt-1">₹0.00</p>
+        </div>
+        <div class="glass p-4 rounded-lg">
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Current Value</p>
+          <p id="hold-current" class="text-xl font-bold font-mono text-white mt-1">₹0.00</p>
+        </div>
+        <div class="glass p-4 rounded-lg">
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Total Gain / Loss</p>
+          <p id="hold-gain" class="text-xl font-bold font-mono mt-1">₹0.00</p>
+        </div>
+        <div class="glass p-4 rounded-lg">
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Return</p>
+          <p id="hold-gain-pct" class="text-xl font-bold font-mono mt-1">0.0%</p>
+        </div>
+      </div>
+
+      <!-- Holdings table -->
+      <div class="glass rounded-lg flex-1 flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-ink-600 bg-ink-800/40">
+          <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Your Assets</p>
+          <button onclick="refreshHoldingsPrices()" id="holdings-refresh-btn"
+            class="text-[10px] font-mono uppercase tracking-wider text-ink-600 hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+            <span id="holdings-refresh-spinner" class="hidden spinner spinner-cyan" style="width:10px;height:10px;"></span>
+            Refresh Prices
+          </button>
+        </div>
+        <div class="overflow-x-auto flex-1">
+          <table class="w-full text-xs font-mono">
+            <thead>
+              <tr class="text-ink-600 uppercase text-[10px] tracking-wider text-left border-b border-ink-600">
+                <th class="px-4 py-2 font-normal">Asset</th>
+                <th class="px-4 py-2 font-normal text-right">Qty</th>
+                <th class="px-4 py-2 font-normal text-right">Avg. Cost</th>
+                <th class="px-4 py-2 font-normal text-right">Price</th>
+                <th class="px-4 py-2 font-normal text-right">Value</th>
+                <th class="px-4 py-2 font-normal text-right">Gain / Loss</th>
+                <th class="px-4 py-2 font-normal text-right">Weight</th>
+                <th class="px-4 py-2 font-normal"></th>
+              </tr>
+            </thead>
+            <tbody id="holdings-table-body">
+              <tr><td colspan="8" class="text-center text-ink-600 italic p-6">No holdings yet — add your first asset above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Allocation chart -->
+      <div class="glass rounded-lg p-2 mt-4 h-64 min-h-[220px]">
+        <p class="text-xs text-ink-600 font-mono text-center pt-2">Portfolio Allocation by Current Value</p>
+        <div id="chart-holdings-alloc" class="w-full" style="height:calc(100% - 24px);"></div>
+      </div>
+    </div>
+
     <!-- Global Empty / Loading States -->
     <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-ink-600 gap-2 z-10 pointer-events-none mt-16">
       <svg class="w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
@@ -699,6 +812,7 @@ async function doSignOut() {
     document.getElementById('user-email-chip').textContent = '';
     refreshScenarioList();
     refreshWatchlistList();
+    refreshHoldingsList();
     return;
   }
   try { await window.__auth.signOut(); } catch (err) { console.error(err); }
@@ -716,6 +830,7 @@ function continueAsGuest() {
   document.getElementById('sign-out-btn').textContent = 'Sign In';
   refreshScenarioList();
   refreshWatchlistList();
+  refreshHoldingsList();
   if (!appBooted) {
     appBooted = true;
     setAppMode('single');
@@ -755,6 +870,7 @@ window.addEventListener('authchange', (e) => {
     currentUid = user.uid;
     refreshScenarioList();
     refreshWatchlistList().then(() => checkWatchlist());
+    refreshHoldingsList();
     if (!appBooted) {
       appBooted = true;
       setAppMode('single');
@@ -772,6 +888,7 @@ window.addEventListener('authchange', (e) => {
     currentUid = null;
     refreshScenarioList();
     refreshWatchlistList();
+    refreshHoldingsList();
   }
 });
 
@@ -841,88 +958,138 @@ function setLoading(on, text) {
 function setAppMode(mode) {
   appMode = mode;
   const isSingle = mode === 'single';
-  
+  const isPortfolio = mode === 'portfolio';
+  const isHoldings = mode === 'holdings';
+
   // UI Tabs
   document.getElementById('btn-mode-single').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isSingle ? 'mode-active' : 'mode-inactive'}`;
-  document.getElementById('btn-mode-portfolio').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${!isSingle ? 'mode-active' : 'mode-inactive'}`;
-  
-  // Sidebars
+  document.getElementById('btn-mode-portfolio').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isPortfolio ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-mode-holdings').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isHoldings ? 'mode-active' : 'mode-inactive'}`;
+
+  // Sidebars — the simulator controls (search, params, run) don't apply to
+  // the Home/Holdings page, which has its own add-holding form in the main panel.
+  document.getElementById('sidebar-sim-controls').classList.toggle('hidden', isHoldings);
   document.getElementById('sidebar-single-info').classList.toggle('hidden', !isSingle);
   document.getElementById('sidebar-single-advanced').classList.toggle('hidden', !isSingle);
-  document.getElementById('sidebar-portfolio').classList.toggle('hidden', isSingle);
-  
+  document.getElementById('sidebar-portfolio').classList.toggle('hidden', !isPortfolio);
+
   // Main Views
   document.getElementById('view-single').classList.toggle('hidden', !isSingle);
-  document.getElementById('view-portfolio').classList.toggle('hidden', isSingle);
+  document.getElementById('view-portfolio').classList.toggle('hidden', !isPortfolio);
+  document.getElementById('view-holdings').classList.toggle('hidden', !isHoldings);
 
   // Labels & Inputs
   document.getElementById('ticker').value = '';
   document.getElementById('search-label').textContent = isSingle ? 'Ticker / Company' : 'Add Ticker to Portfolio';
   document.getElementById('run-btn-label').textContent = isSingle ? 'Calculate Matrix' : 'Optimize Portfolio';
-  
+
+  if (isHoldings) {
+    document.getElementById('main-title').textContent = 'My Holdings';
+    document.getElementById('main-subtitle').textContent = 'Track the real assets you hold and how they\'re performing';
+  } else {
+    document.getElementById('main-title').textContent = 'Monte Carlo Terminal';
+    document.getElementById('main-subtitle').textContent = 'Select parameters and run the matrix to begin';
+  }
+
   // Reset Empty State based on whether data exists for the current mode
-  const hasData = isSingle ? currentData != null : currentPortfolio != null;
+  // (the holdings page has its own empty state built into its table, so the
+  // global empty-state overlay never applies there).
+  const hasData = isHoldings ? true : (isSingle ? currentData != null : currentPortfolio != null);
   document.getElementById('empty-state').classList.toggle('hidden', hasData);
   document.getElementById('empty-msg').textContent = isSingle ? "No simulation yet — select parameters and run matrix." : "Add at least 2 tickers to build an Efficient Frontier.";
+
+  if (isHoldings) refreshHoldingsList();
 
   hideSuggestions();
 }
 
 // ---------- Search & Autocomplete ----------
+// Generic ticker-suggestion widget: wires an <input> to a suggestion <div>,
+// hitting /api/search as the person types and resolving arrow keys / Enter /
+// click to a real ticker symbol via onSelect. Used by the main search box,
+// the Watchlist ticker field, and the My Holdings "Add a Holding" field, so
+// all three get the same debounced autocomplete + keyboard navigation.
+function createTickerSuggest(inputEl, boxEl, onSelect) {
+  const state = { debounce: null, index: -1 };
+
+  function highlight(rows) { rows.forEach((r, i) => r.classList.toggle('active', i === state.index)); }
+  function hide() { boxEl.classList.add('hidden'); boxEl.innerHTML = ''; state.index = -1; }
+
+  async function fetchAndRender(q) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return;
+      const results = await res.json();
+      if (!results.length) { hide(); return; }
+      boxEl.innerHTML = results.map(r => `
+        <div class="suggest-row px-3 py-2 flex items-center justify-between cursor-pointer text-sm" data-ticker="${escapeHtml(r.ticker)}" data-name="${escapeHtml(r.name)}">
+          <span class="text-white">${escapeHtml(r.name)}</span>
+          <span class="text-ink-600 font-mono text-xs">${escapeHtml(r.ticker)}</span>
+        </div>`).join('');
+      boxEl.classList.remove('hidden');
+      state.index = -1;
+      boxEl.querySelectorAll('.suggest-row').forEach(row => {
+        row.addEventListener('click', () => {
+          inputEl.value = row.dataset.ticker;
+          hide();
+          onSelect(row.dataset.ticker, row.dataset.name);
+        });
+      });
+    } catch (e) {}
+  }
+
+  inputEl.addEventListener('input', () => {
+    const q = inputEl.value.trim();
+    clearTimeout(state.debounce);
+    if (q.length < 1) { hide(); return; }
+    state.debounce = setTimeout(() => fetchAndRender(q), 250);
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    const rows = boxEl.querySelectorAll('.suggest-row');
+    if (!rows.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); state.index = Math.min(state.index + 1, rows.length - 1); highlight(rows); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); state.index = Math.max(state.index - 1, 0); highlight(rows); }
+    else if (e.key === 'Enter') { e.preventDefault(); rows[state.index >= 0 ? state.index : 0].click(); }
+    else if (e.key === 'Escape') hide();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!boxEl.contains(e.target) && e.target !== inputEl) hide();
+  });
+
+  return { hide };
+}
+
 const tickerInput = document.getElementById('ticker');
 const suggestBox = document.getElementById('suggest-box');
+const mainSuggest = createTickerSuggest(tickerInput, suggestBox, (ticker) => {
+  if (appMode === 'single') fetchLiveMarketData();
+  else if (appMode === 'portfolio') addPortfolioTicker(ticker);
+});
 
-tickerInput.addEventListener('input', () => {
-  const q = tickerInput.value.trim();
-  clearTimeout(searchDebounce);
-  if (q.length < 1) { hideSuggestions(); return; }
-  searchDebounce = setTimeout(() => fetchSuggestions(q), 250);
+const watchlistTickerInput = document.getElementById('watchlist-ticker');
+const watchlistSuggestBox = document.getElementById('watchlist-suggest-box');
+createTickerSuggest(watchlistTickerInput, watchlistSuggestBox, () => {});
+
+const holdingTickerInput = document.getElementById('holding-ticker');
+const holdingSuggestBox = document.getElementById('holding-suggest-box');
+createTickerSuggest(holdingTickerInput, holdingSuggestBox, (ticker, name) => {
+  holdingTickerInput.dataset.name = name || '';
 });
 
 tickerInput.addEventListener('keydown', (e) => {
   const rows = suggestBox.querySelectorAll('.suggest-row');
-  if (!rows.length) { if (e.key === 'Enter') executeSearchAction(); return; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); suggestIndex = Math.min(suggestIndex + 1, rows.length - 1); highlightSuggestion(rows); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); suggestIndex = Math.max(suggestIndex - 1, 0); highlightSuggestion(rows); }
-  // Enter always resolves to a real suggestion (defaulting to the top match) rather than
-  // the raw typed text. This is what previously let unresolved names like "Google" or
-  // "Tech Mahindra" get pushed into the portfolio instead of their actual ticker symbol.
-  else if (e.key === 'Enter') { e.preventDefault(); rows[suggestIndex >= 0 ? suggestIndex : 0].click(); }
-  else if (e.key === 'Escape') hideSuggestions();
+  if (!rows.length && e.key === 'Enter') executeSearchAction();
 });
 
 document.addEventListener('click', (e) => {
   const removeBtn = e.target.closest('.remove-ticker-btn');
   if (removeBtn) removePortfolioTicker(removeBtn.dataset.ticker);
-  if (!suggestBox.contains(e.target) && e.target !== tickerInput) hideSuggestions();
 });
 
 function highlightSuggestion(rows) { rows.forEach((r, i) => r.classList.toggle('active', i === suggestIndex)); }
-function hideSuggestions() { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; suggestIndex = -1; }
-
-async function fetchSuggestions(q) {
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(q)}`);
-    if (!res.ok) return;
-    const results = await res.json();
-    if (!results.length) { hideSuggestions(); return; }
-    suggestBox.innerHTML = results.map(r => `
-      <div class="suggest-row px-3 py-2 flex items-center justify-between cursor-pointer text-sm" data-ticker="${escapeHtml(r.ticker)}">
-        <span class="text-white">${escapeHtml(r.name)}</span>
-        <span class="text-ink-600 font-mono text-xs">${escapeHtml(r.ticker)}</span>
-      </div>`).join('');
-    suggestBox.classList.remove('hidden');
-    suggestIndex = -1;
-    suggestBox.querySelectorAll('.suggest-row').forEach(row => {
-      row.addEventListener('click', () => {
-        tickerInput.value = row.dataset.ticker;
-        hideSuggestions();
-        if (appMode === 'single') fetchLiveMarketData();
-        else addPortfolioTicker(row.dataset.ticker);
-      });
-    });
-  } catch (e) {}
-}
+function hideSuggestions() { mainSuggest.hide(); }
 
 // A valid symbol: letters/digits/dots/hyphens, optional leading caret for indices
 // (e.g. AAPL, TECHM.NS, ^NSEI). No spaces — that's the tell that a company name
@@ -1902,6 +2069,232 @@ async function checkWatchlist() {
     const body = alerts.map(a => `${a.ticker}: ${WATCHLIST_METRIC_LABELS[a.metric] || a.metric} ${a.condition === 'below' ? '≤' : '≥'} ${a.threshold}`).join('\n');
     try { new Notification('PRO-SIM Watchlist Alert', { body }); } catch (e) {}
   }
+}
+
+// ---------- My Holdings (Homepage portfolio tracker) ----------
+window.__holdingsCache = [];
+let holdingsQuoteCache = {}; // ticker -> quote response, refreshed on demand
+
+async function addHolding() {
+  if (!currentUid) { showError('Sign in to build your holdings portfolio.'); return; }
+  const tickerRaw = holdingTickerInput.value.trim();
+  const ticker = resolveTypedTicker(tickerRaw);
+  const qty = parseFloat(document.getElementById('holding-qty').value);
+  const avgPrice = parseFloat(document.getElementById('holding-avgprice').value);
+
+  if (!ticker) { showError('Enter a ticker for the holding.'); return; }
+  if (!TICKER_PATTERN.test(ticker)) { showError(`"${tickerRaw}" isn't a ticker symbol — pick a match from the suggestions list instead.`); return; }
+  if (!(qty > 0)) { showError('Enter a valid quantity greater than 0.'); return; }
+  if (!(avgPrice > 0)) { showError('Enter a valid average buy price greater than 0.'); return; }
+
+  const btn = document.getElementById('holding-add-btn');
+  btn.disabled = true;
+  try {
+    clearError();
+    await window.__holdings.save(currentUid, {
+      ticker,
+      name: holdingTickerInput.dataset.name || ticker,
+      quantity: qty,
+      avgPrice: avgPrice
+    });
+    holdingTickerInput.value = '';
+    holdingTickerInput.dataset.name = '';
+    document.getElementById('holding-qty').value = '';
+    document.getElementById('holding-avgprice').value = '';
+    await refreshHoldingsList();
+    refreshHoldingsPrices();
+  } catch (err) {
+    showError('Could not add holding: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Best-effort resolution for whatever the person left in the ticker box —
+// mirrors the "Enter picks the top suggestion" behavior of the other search
+// boxes, but falls back to their raw (uppercased) text if suggestions never
+// loaded, so a fast typer isn't blocked from adding a holding.
+function resolveTypedTicker(raw) {
+  const rows = holdingSuggestBox.querySelectorAll('.suggest-row');
+  if (rows.length) return rows[0].dataset.ticker;
+  return raw.toUpperCase();
+}
+
+async function deleteHolding(id) {
+  if (!currentUid) return;
+  try {
+    await window.__holdings.remove(currentUid, id);
+    await refreshHoldingsList();
+  } catch (err) {
+    showError('Could not remove holding: ' + err.message);
+  }
+}
+
+async function refreshHoldingsList() {
+  if (!currentUid) {
+    window.__holdingsCache = [];
+    renderHoldings();
+    return;
+  }
+  try {
+    window.__holdingsCache = await window.__holdings.list(currentUid);
+    renderHoldings();
+    refreshHoldingsPrices();
+  } catch (err) {
+    const body = document.getElementById('holdings-table-body');
+    body.innerHTML = `<tr><td colspan="8" class="text-center text-loss p-6">Failed to load holdings.</td></tr>`;
+  }
+}
+
+async function refreshHoldingsPrices() {
+  const items = window.__holdingsCache || [];
+  if (!items.length) return;
+
+  const btn = document.getElementById('holdings-refresh-btn');
+  const spinner = document.getElementById('holdings-refresh-spinner');
+  if (btn) btn.disabled = true;
+  if (spinner) spinner.classList.remove('hidden');
+
+  const uniqueTickers = [...new Set(items.map(it => it.ticker))];
+  await Promise.all(uniqueTickers.map(async (ticker) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/quote/${encodeURIComponent(ticker)}`);
+      if (!res.ok) throw new Error('bad response');
+      holdingsQuoteCache[ticker] = await res.json();
+    } catch (err) {
+      holdingsQuoteCache[ticker] = null;
+    }
+  }));
+
+  if (btn) btn.disabled = false;
+  if (spinner) spinner.classList.add('hidden');
+  renderHoldings();
+}
+
+function renderHoldings() {
+  const body = document.getElementById('holdings-table-body');
+  const items = window.__holdingsCache || [];
+
+  if (!currentUid) {
+    body.innerHTML = `<tr><td colspan="8" class="text-center text-ink-600 italic p-6">Sign in to build and track your holdings portfolio.</td></tr>`;
+    setHoldingsSummary(0, 0);
+    Plotly.purge('chart-holdings-alloc');
+    return;
+  }
+  if (!items.length) {
+    body.innerHTML = `<tr><td colspan="8" class="text-center text-ink-600 italic p-6">No holdings yet — add your first asset above.</td></tr>`;
+    setHoldingsSummary(0, 0);
+    Plotly.purge('chart-holdings-alloc');
+    return;
+  }
+
+  let totalInvestedInr = 0;
+  let totalCurrentInr = 0;
+  const rows = [];
+  const allocLabels = [];
+  const allocValues = [];
+
+  items.forEach(it => {
+    const q = holdingsQuoteCache[it.ticker];
+    const investedNative = it.quantity * it.avgPrice;
+    const fx = q ? (q.exchange_rate_to_inr || 1) : 1;
+    const investedInr = investedNative * fx;
+    totalInvestedInr += investedInr;
+
+    if (!q) {
+      rows.push(`
+        <tr class="border-b border-ink-600/50 hover:bg-ink-800/30">
+          <td class="px-4 py-2.5">
+            <p class="text-white">${escapeHtml(it.name || it.ticker)}</p>
+            <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)}</p>
+          </td>
+          <td class="px-4 py-2.5 text-right">${fmt2.format(it.quantity)}</td>
+          <td class="px-4 py-2.5 text-right">${fmt2.format(it.avgPrice)}</td>
+          <td class="px-4 py-2.5 text-right text-ink-600" colspan="4">Price unavailable</td>
+          <td class="px-4 py-2.5 text-right">
+            <button class="text-ink-600 hover:text-loss transition-colors" onclick="deleteHolding('${escapeHtml(it.id)}')" aria-label="Remove ${escapeHtml(it.ticker)}">✕</button>
+          </td>
+        </tr>`);
+      return;
+    }
+
+    const currentNative = it.quantity * q.current_price;
+    const currentInr = currentNative * fx;
+    totalCurrentInr += currentInr;
+    const gainNative = currentNative - investedNative;
+    const gainPct = investedNative > 0 ? (gainNative / investedNative) * 100 : 0;
+    const gainClass = gainNative >= 0 ? 'text-gain' : 'text-loss';
+    const ccy = ccySymbol(q.currency);
+
+    allocLabels.push(it.ticker);
+    allocValues.push(currentInr);
+
+    rows.push(`
+      <tr class="border-b border-ink-600/50 hover:bg-ink-800/30">
+        <td class="px-4 py-2.5">
+          <p class="text-white">${escapeHtml(q.company || it.name || it.ticker)}</p>
+          <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)}</p>
+        </td>
+        <td class="px-4 py-2.5 text-right">${fmt2.format(it.quantity)}</td>
+        <td class="px-4 py-2.5 text-right">${ccy}${fmt2.format(it.avgPrice)}</td>
+        <td class="px-4 py-2.5 text-right">${ccy}${fmt2.format(q.current_price)}</td>
+        <td class="px-4 py-2.5 text-right">${ccy}${fmt2.format(currentNative)}</td>
+        <td class="px-4 py-2.5 text-right ${gainClass}">${gainNative >= 0 ? '+' : ''}${ccy}${fmt2.format(gainNative)} <span class="text-[10px]">(${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)</span></td>
+        <td class="px-4 py-2.5 text-right" id="hold-weight-${escapeHtml(it.id)}">—</td>
+        <td class="px-4 py-2.5 text-right">
+          <button class="text-ink-600 hover:text-loss transition-colors" onclick="deleteHolding('${escapeHtml(it.id)}')" aria-label="Remove ${escapeHtml(it.ticker)}">✕</button>
+        </td>
+      </tr>`);
+  });
+
+  body.innerHTML = rows.join('');
+
+  // Fill in weight % now that we know the portfolio total
+  items.forEach(it => {
+    const q = holdingsQuoteCache[it.ticker];
+    if (!q) return;
+    const fx = q.exchange_rate_to_inr || 1;
+    const currentInr = it.quantity * q.current_price * fx;
+    const weight = totalCurrentInr > 0 ? (currentInr / totalCurrentInr) * 100 : 0;
+    const cell = document.getElementById(`hold-weight-${it.id}`);
+    if (cell) cell.textContent = weight.toFixed(1) + '%';
+  });
+
+  setHoldingsSummary(totalInvestedInr, totalCurrentInr);
+  renderHoldingsAllocationChart(allocLabels, allocValues);
+}
+
+function setHoldingsSummary(invested, current) {
+  const gain = current - invested;
+  const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
+  document.getElementById('hold-invested').textContent = '₹' + fmt2.format(invested);
+  document.getElementById('hold-current').textContent = '₹' + fmt2.format(current);
+  const gainEl = document.getElementById('hold-gain');
+  const gainPctEl = document.getElementById('hold-gain-pct');
+  gainEl.textContent = (gain >= 0 ? '+' : '') + '₹' + fmt2.format(gain);
+  gainPctEl.textContent = (gainPct >= 0 ? '+' : '') + gainPct.toFixed(1) + '%';
+  gainEl.className = `text-xl font-bold font-mono mt-1 ${gain >= 0 ? 'text-gain' : 'text-loss'}`;
+  gainPctEl.className = `text-xl font-bold font-mono mt-1 ${gainPct >= 0 ? 'text-gain' : 'text-loss'}`;
+}
+
+function renderHoldingsAllocationChart(labels, values) {
+  const el = document.getElementById('chart-holdings-alloc');
+  if (!labels.length) { Plotly.purge(el); return; }
+  const isLight = document.body.classList.contains('light');
+  Plotly.newPlot(el, [{
+    type: 'pie',
+    labels, values,
+    hole: 0.55,
+    marker: { colors: ['#22d3ee', '#5eead4', '#fbbf24', '#f0997b', '#34d399', '#f87171', '#818cf8', '#e879f9'] },
+    textfont: { color: isLight ? '#1a2233' : '#e7ebf2', size: 10 },
+    hoverinfo: 'label+percent+value'
+  }], {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    showlegend: true,
+    legend: { font: { color: isLight ? '#1a2233' : '#e7ebf2', size: 10 } },
+    margin: { l: 10, r: 10, t: 10, b: 10 }
+  }, { responsive: true, displayModeBar: false });
 }
 
 // setAppMode('single') now runs from the authchange handler above, once a
