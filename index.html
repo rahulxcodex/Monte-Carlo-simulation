@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html><html lang="en" class="dark"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PRO-SIM · Monte Carlo & Portfolio Terminal</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -27,6 +28,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
@@ -34,6 +36,9 @@
     signInWithEmailAndPassword, createUserWithEmailAndPassword,
     signOut, GoogleAuthProvider, signInWithPopup
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, orderBy, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD-JkCCKiEWBAjb8B1vACllKyJsMtzyqqE",
@@ -47,6 +52,7 @@
 
   const fbApp = initializeApp(firebaseConfig);
   const auth = getAuth(fbApp);
+  const db = getFirestore(fbApp);
   const googleProvider = new GoogleAuthProvider();
 
   window.__auth = {
@@ -54,6 +60,23 @@
     signUp: (email, pw) => createUserWithEmailAndPassword(auth, email, pw),
     signInGoogle: () => signInWithPopup(auth, googleProvider),
     signOut: () => signOut(auth)
+  };
+
+  // Per-user named simulation presets, stored at users/{uid}/scenarios/{autoId}.
+  window.__scenarios = {
+    save: async (uid, scenario) => {
+      const ref = doc(collection(db, 'users', uid, 'scenarios'));
+      await setDoc(ref, { ...scenario, createdAt: serverTimestamp() });
+      return ref.id;
+    },
+    list: async (uid) => {
+      const q = query(collection(db, 'users', uid, 'scenarios'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+    remove: async (uid, id) => {
+      await deleteDoc(doc(db, 'users', uid, 'scenarios', id));
+    }
   };
 
   setPersistence(auth, browserLocalPersistence).then(() => {
@@ -106,6 +129,43 @@
   .suggest-row:hover, .suggest-row.active { background:rgba(34,211,238,0.08); }
   ::placeholder { color:#475064; }
   @media (prefers-reduced-motion: reduce) { .spinner { animation:none; } }
+
+  /* ---------- Light theme overrides ---------- */
+  /* The dark palette below is baked into literal Tailwind ink-* utility classes
+     rather than dark: variants, so the light theme is implemented as attribute
+     overrides scoped under body.light rather than a Tailwind dark-mode swap. */
+  body.light { background:#f4f6fb; color:#1a2233; }
+  body.light .glass { background:rgba(255,255,255,0.75); backdrop-filter:blur(14px); border:1px solid rgba(203,213,225,0.9); }
+  body.light .glass-strong { background:rgba(255,255,255,0.92); backdrop-filter:blur(18px); border:1px solid rgba(203,213,225,0.9); }
+  body.light .bg-ink-950,
+  body.light .bg-ink-950\/95 { background:rgba(244,246,251,0.95) !important; }
+  body.light .bg-ink-900,
+  body.light .bg-ink-900\/95,
+  body.light .bg-ink-900\/70,
+  body.light .bg-ink-900\/50 { background:rgba(255,255,255,0.92) !important; }
+  body.light .bg-ink-800,
+  body.light .bg-ink-800\/60,
+  body.light .bg-ink-800\/40 { background:#eef1f7 !important; }
+  body.light .bg-ink-700 { background:#e4e9f2 !important; }
+  body.light .bg-ink-600 { background:#dbe2ee !important; }
+  body.light .border-ink-600,
+  body.light .border-ink-600\/50 { border-color:#cbd5e1 !important; }
+  body.light .text-white { color:#111827 !important; }
+  body.light .text-ink-600 { color:#64748b !important; }
+  body.light ::placeholder { color:#94a3b8; }
+  body.light .mode-active { background:#e0f2f6; color:#0891b2; }
+  body.light .mode-inactive { color:#94a3b8; }
+  body.light .mode-inactive:hover { color:#334155; background:rgba(148,163,184,0.15); }
+  body.light .tab-inactive { color:#94a3b8; }
+  body.light .tab-inactive:hover { color:#1e293b; }
+  body.light .toggle { background:#cbd5e1; }
+  body.light .suggest-row:hover, body.light .suggest-row.active { background:rgba(8,145,178,0.08); }
+  body.light input[type=range]::-webkit-slider-runnable-track { background:#cbd5e1; }
+  body.light ::-webkit-scrollbar-track { background:#eef1f7; }
+  body.light ::-webkit-scrollbar-thumb { background:#cbd5e1; }
+  .theme-toggle-icon-sun { display:none; }
+  body.light .theme-toggle-icon-sun { display:inline; }
+  body.light .theme-toggle-icon-moon { display:none; }
 </style>
 </head>
 <body class="h-screen flex flex-col lg:flex-row overflow-hidden antialiased">
@@ -147,7 +207,11 @@
       <h1 class="font-display text-lg font-bold text-white flex items-center gap-2 tracking-wide mb-4">
         <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
         PRO-SIM
-        <span class="ml-auto text-[10px] font-mono font-normal tracking-widest text-ink-600 border border-ink-600 rounded px-1.5 py-0.5" id="status-pill">OFFLINE</span>
+        <button onclick="toggleTheme()" title="Toggle theme" class="ml-auto text-ink-600 hover:text-cyan-400 transition-colors border border-ink-600 rounded p-1">
+          <svg class="w-3.5 h-3.5 theme-toggle-icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          <svg class="w-3.5 h-3.5 theme-toggle-icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        </button>
+        <span class="text-[10px] font-mono font-normal tracking-widest text-ink-600 border border-ink-600 rounded px-1.5 py-0.5" id="status-pill">OFFLINE</span>
       </h1>
       <div class="flex items-center justify-between text-[10px] font-mono text-ink-600 mb-4 -mt-2">
         <span id="user-email-chip" class="truncate max-w-[12rem]"></span>
@@ -305,7 +369,31 @@
         class="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-ink-950 font-display font-bold text-sm py-3 px-4 rounded-lg transition-all flex justify-center items-center gap-2">
         <span id="run-btn-label">Calculate Matrix</span>
       </button>
+      <div class="flex gap-2">
+        <button onclick="shareCurrentLink()" id="share-btn" title="Copy shareable link"
+          class="flex-1 text-[11px] font-mono uppercase tracking-wider py-2 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">
+          🔗 Share Link
+        </button>
+      </div>
       <div id="error-message" class="hidden text-xs text-loss bg-loss/10 p-2.5 rounded border border-loss/30 font-mono leading-relaxed"></div>
+
+      <hr class="border-ink-600">
+
+      <!-- Save / Load Scenarios (Firestore, per signed-in user) -->
+      <div>
+        <p class="text-[11px] uppercase tracking-wider text-ink-600 mb-2 font-mono">Saved Scenarios</p>
+        <div class="flex gap-2 mb-2">
+          <input type="text" id="scenario-name" placeholder="Scenario name…"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          <button onclick="saveScenario()" id="scenario-save-btn"
+            class="bg-ink-700 hover:bg-ink-600 border border-ink-600 px-3 py-2 rounded text-cyan-400 transition-colors shrink-0 text-xs font-mono uppercase tracking-wider">
+            Save
+          </button>
+        </div>
+        <ul id="scenario-list" class="space-y-1.5 max-h-44 overflow-y-auto">
+          <li class="text-xs text-ink-600 font-mono italic p-1">No saved scenarios yet.</li>
+        </ul>
+      </div>
     </div>
   </aside>
 
@@ -379,11 +467,16 @@
       </div>
 
       <div class="glass rounded-lg flex-1 min-h-[440px] flex flex-col relative">
-        <div class="flex border-b border-ink-600 bg-ink-800/40 rounded-t-lg px-2 overflow-x-auto">
+        <div class="flex items-center border-b border-ink-600 bg-ink-800/40 rounded-t-lg px-2 overflow-x-auto">
           <button onclick="switchTab('paths')" id="tab-paths" class="px-4 py-3 text-xs font-mono tab-active focus:outline-none whitespace-nowrap">📈 Path Projection</button>
           <button onclick="switchTab('fan')" id="tab-fan" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📉 Confidence Fan</button>
           <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📊 Distribution</button>
           <button onclick="switchTab('dd')" id="tab-dd" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⚠️ Drawdown</button>
+          <div class="ml-auto flex gap-1.5 pr-1 shrink-0">
+            <button onclick="downloadChartCSV()" title="Download chart data as CSV" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">CSV</button>
+            <button onclick="downloadChartPNG()" title="Download chart as PNG" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PNG</button>
+            <button onclick="downloadMetricsPDF()" title="Download metrics summary as PDF" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PDF</button>
+          </div>
         </div>
         <div class="relative flex-1 w-full h-full p-2 min-h-[380px]">
           <div id="chart-paths" class="absolute inset-0 w-full h-full"></div>
@@ -413,6 +506,12 @@
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Probability of Profit</p>
           <p id="port-profit" class="text-xl font-bold font-mono text-gain mt-1">—</p>
         </div>
+      </div>
+
+      <div class="flex gap-1.5 mb-3">
+        <button onclick="downloadChartCSV()" title="Download portfolio data as CSV" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">CSV</button>
+        <button onclick="downloadChartPNG()" title="Download efficient frontier as PNG" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PNG</button>
+        <button onclick="downloadMetricsPDF()" title="Download metrics summary as PDF" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PDF</button>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-[500px]">
@@ -555,14 +654,21 @@ window.addEventListener('authchange', (e) => {
   if (user) {
     overlay.classList.add('hidden');
     document.getElementById('user-email-chip').textContent = user.email || user.displayName || 'Signed in';
+    currentUid = user.uid;
+    refreshScenarioList();
     if (!appBooted) {
       appBooted = true;
       setAppMode('single');
+      // If the URL carries shared simulation params, apply them and run
+      // automatically instead of leaving the dashboard on its blank state.
+      if (applySharedParamsFromURL()) runMatrix();
     }
   } else {
     overlay.classList.remove('hidden');
     document.getElementById('auth-email').value = '';
     document.getElementById('auth-password').value = '';
+    currentUid = null;
+    refreshScenarioList();
   }
 });
 
@@ -831,6 +937,7 @@ async function fetchLiveMarketData() {
     renderAllSingle();
     setStatus('LIVE', true);
     maybeShowNiftyBreakdown(data.ticker);
+    updateShareURL();
   } catch (err) {
     showError(err.message);
     setStatus('ERROR', false);
@@ -895,6 +1002,7 @@ async function fetchPortfolioOptimization() {
     currentPortfolio = data;
     renderPortfolio(data);
     setStatus('LIVE', true);
+    updateShareURL();
   } catch (err) {
     showError(err.message);
     setStatus('ERROR', false);
@@ -1171,6 +1279,340 @@ function runClientSimulation() {
     setStatus('ERROR', false);
   } finally {
     setLoading(false);
+  }
+}
+
+// ---------- Theme toggle (dark / light) ----------
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.documentElement.classList.toggle('dark', !isLight);
+  try { localStorage.setItem('prosim-theme', isLight ? 'light' : 'dark'); } catch (e) {}
+  // Nudge Plotly charts to re-flow now that surrounding panel colors changed.
+  ['paths', 'fan', 'hist', 'dd'].forEach(t => {
+    const el = document.getElementById(`chart-${t}`);
+    if (el && el.data) Plotly.Plots.resize(el);
+  });
+  ['frontier', 'weights', 'port-paths'].forEach(t => {
+    const el = document.getElementById(`chart-${t}`);
+    if (el && el.data) Plotly.Plots.resize(el);
+  });
+}
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('prosim-theme'); } catch (e) {}
+  if (saved === 'light') {
+    document.body.classList.add('light');
+    document.documentElement.classList.remove('dark');
+  }
+})();
+
+// ---------- Shareable links ----------
+// Encodes the current parameter set (mode, ticker(s), horizon, sims, model,
+// overrides) into the URL query string so a simulation setup can be copied,
+// bookmarked, or sent to someone else.
+function buildShareParams() {
+  const p = new URLSearchParams();
+  p.set('mode', appMode);
+  p.set('investment', document.getElementById('investment').value);
+  p.set('horizon', document.getElementById('horizon').value);
+  p.set('simulations', document.getElementById('simulations').value);
+  if (appMode === 'single') {
+    p.set('ticker', tickerInput.value.trim().toUpperCase() || (currentData ? '' : ''));
+    p.set('model', document.getElementById('sim-model').value);
+    if (overrideOn) {
+      p.set('override', '1');
+      p.set('mu', document.getElementById('mu').value);
+      p.set('sigma', document.getElementById('sigma').value);
+    }
+  } else {
+    p.set('tickers', portfolioTickers.join(','));
+  }
+  return p;
+}
+
+function updateShareURL() {
+  const p = buildShareParams();
+  const newUrl = `${location.pathname}?${p.toString()}`;
+  history.replaceState(null, '', newUrl);
+}
+
+async function shareCurrentLink() {
+  updateShareURL();
+  try {
+    await navigator.clipboard.writeText(location.href);
+    showError('Link copied to clipboard.');
+    setTimeout(clearError, 2500);
+  } catch (e) {
+    showError('Copy this URL: ' + location.href);
+  }
+}
+
+// Reads ?mode/ticker/tickers/horizon/simulations/model/override/mu/sigma from
+// the URL (if present) and applies them to the form, then triggers a run.
+function applySharedParamsFromURL() {
+  const p = new URLSearchParams(location.search);
+  if (![...p.keys()].length) return false;
+
+  const mode = p.get('mode') === 'portfolio' ? 'portfolio' : 'single';
+  setAppMode(mode);
+
+  if (p.has('investment')) document.getElementById('investment').value = p.get('investment');
+  if (p.has('horizon')) document.getElementById('horizon').value = p.get('horizon');
+  if (p.has('simulations')) document.getElementById('simulations').value = p.get('simulations');
+
+  if (mode === 'single') {
+    if (p.has('model')) document.getElementById('sim-model').value = p.get('model');
+    if (p.get('override') === '1') {
+      if (!overrideOn) toggleOverride();
+      if (p.has('mu')) document.getElementById('mu').value = p.get('mu');
+      if (p.has('sigma')) document.getElementById('sigma').value = p.get('sigma');
+      onOverrideSlider();
+    }
+    if (p.has('ticker') && p.get('ticker')) {
+      tickerInput.value = p.get('ticker');
+    }
+  } else {
+    if (p.has('tickers') && p.get('tickers')) {
+      portfolioTickers = p.get('tickers').split(',').filter(Boolean);
+      updatePortfolioUI();
+    }
+  }
+  return true;
+}
+
+// ---------- CSV / PNG / PDF export ----------
+function csvFromRows(headers, rows) {
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n');
+}
+
+function triggerDownload(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Exports the data behind the currently visible chart (single-asset tabs, or
+// the efficient frontier when in portfolio mode) as a CSV file.
+function downloadChartCSV() {
+  try {
+    if (appMode === 'single') {
+      if (!currentData) { showError('Run a simulation first.'); return; }
+      const d = currentData;
+      let headers, rows, name;
+      if (activeTab === 'paths') {
+        headers = ['day', ...d.paths.map((_, i) => `path_${i + 1}`)];
+        rows = d.paths[0].map((_, t) => [t, ...d.paths.map(p => p[t])]);
+        name = 'path_projection';
+      } else if (activeTab === 'fan') {
+        headers = ['day', 'p5', 'p25', 'p50', 'p75', 'p95'];
+        rows = d.fan.map(f => [f.day, f.p5, f.p25, f.p50, f.p75, f.p95]);
+        name = 'confidence_fan';
+      } else if (activeTab === 'hist') {
+        headers = ['bin_start', 'count'];
+        rows = d.histogram.bins.map((b, i) => [b, d.histogram.counts[i]]);
+        name = 'distribution';
+      } else {
+        headers = ['drawdown_pct_bin_start', 'count'];
+        rows = d.drawdown.histogram.bins.map((b, i) => [b, d.drawdown.histogram.counts[i]]);
+        name = 'drawdown';
+      }
+      triggerDownload(`prosim_${name}_${(tickerInput.value || 'asset').toLowerCase()}.csv`, csvFromRows(headers, rows), 'text/csv');
+    } else {
+      if (!currentPortfolio) { showError('Optimize a portfolio first.'); return; }
+      const data = currentPortfolio;
+      const headers = ['volatility', 'return', 'sharpe'];
+      const rows = data.frontier.volatility.map((v, i) => [v, data.frontier.return[i], data.frontier.sharpe[i]]);
+      triggerDownload('prosim_efficient_frontier.csv', csvFromRows(headers, rows), 'text/csv');
+    }
+  } catch (err) {
+    showError('CSV export failed: ' + err.message);
+  }
+}
+
+function downloadChartPNG() {
+  try {
+    const elId = appMode === 'single' ? `chart-${activeTab}` : 'chart-frontier';
+    const el = document.getElementById(elId);
+    if (!el || !el.data) { showError('Nothing to export yet — run a simulation first.'); return; }
+    Plotly.downloadImage(el, { format: 'png', filename: `prosim_${elId}`, width: 1200, height: 700 });
+  } catch (err) {
+    showError('PNG export failed: ' + err.message);
+  }
+}
+
+// Builds a one-page PDF summary of the metrics panel (VaR, CVaR, drawdown,
+// etc.) for the current run, using jsPDF loaded from cdnjs.
+function downloadMetricsPDF() {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 18;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('PRO-SIM · Simulation Summary', 14, y); y += 8;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.setTextColor(90, 90, 90);
+    doc.text(new Date().toLocaleString(), 14, y); y += 10;
+    doc.setTextColor(20, 20, 20);
+
+    const addRow = (label, value) => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.text(label, 14, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text(String(value), 100, y);
+      y += 7;
+    };
+
+    if (appMode === 'single') {
+      if (!currentData) { showError('Run a simulation first.'); return; }
+      const d = currentData;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+      doc.text(`${tickerInput.value.trim().toUpperCase() || 'Asset'} · Single Asset`, 14, y); y += 8;
+      addRow('Current Price', money(d.s0));
+      addRow('Expected Return (mu)', pct(d.mu));
+      addRow('Volatility (sigma)', pct(d.sigma));
+      addRow('Sharpe Ratio', d.sharpe.toFixed(2));
+      addRow('Expected Portfolio Value', money(d.expectedPortfolio));
+      addRow('Probability of Profit', d.probabilityProfit.toFixed(1) + '%');
+      addRow('VaR 95%', money(d.var95));
+      addRow('VaR 99%', money(d.var99));
+      addRow('CVaR 95%', money(d.cvar95));
+      addRow('Best Case (95th pct)', money(d.bestCase));
+      addRow('Worst Case (5th pct)', money(d.worstCase));
+      addRow('Median Drawdown', pctVal(d.drawdown.percentiles.p50));
+      addRow('95th Pct Drawdown', pctVal(d.drawdown.percentiles.p95));
+    } else {
+      if (!currentPortfolio) { showError('Optimize a portfolio first.'); return; }
+      const data = currentPortfolio;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+      doc.text(`Portfolio (${portfolioTickers.join(', ')})`, 14, y); y += 8;
+      addRow('Max Sharpe Return', pct(data.expected_return));
+      addRow('Portfolio Volatility', pct(data.volatility));
+      addRow('Max Sharpe Ratio', data.sharpe_ratio.toFixed(2));
+      addRow('Probability of Profit', data.probability_profit.toFixed(1) + '%');
+      y += 3;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('Max Sharpe Allocation', 14, y); y += 6;
+      Object.entries(data.max_sharpe_weights).forEach(([t, w]) => addRow(t, pctVal(w * 100)));
+    }
+
+    y += 4;
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+    doc.text('Simulations are statistical projections, not financial advice.', 14, y);
+    doc.save('prosim_summary.pdf');
+  } catch (err) {
+    showError('PDF export failed: ' + err.message);
+  }
+}
+
+// ---------- Save / load scenarios (Firestore) ----------
+let currentUid = null;
+
+function collectScenarioPayload() {
+  return {
+    mode: appMode,
+    ticker: appMode === 'single' ? tickerInput.value.trim().toUpperCase() : null,
+    portfolioTickers: appMode === 'portfolio' ? [...portfolioTickers] : [],
+    investment: document.getElementById('investment').value,
+    horizon: document.getElementById('horizon').value,
+    simulations: document.getElementById('simulations').value,
+    model: document.getElementById('sim-model').value,
+    overrideOn,
+    mu: document.getElementById('mu').value,
+    sigma: document.getElementById('sigma').value
+  };
+}
+
+async function saveScenario() {
+  if (!currentUid) { showError('Sign in to save scenarios.'); return; }
+  const nameInput = document.getElementById('scenario-name');
+  const name = nameInput.value.trim();
+  if (!name) { showError('Give the scenario a name first.'); return; }
+
+  const btn = document.getElementById('scenario-save-btn');
+  btn.disabled = true;
+  try {
+    await window.__scenarios.save(currentUid, { name, ...collectScenarioPayload() });
+    nameInput.value = '';
+    await refreshScenarioList();
+  } catch (err) {
+    showError('Could not save scenario: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function refreshScenarioList() {
+  const list = document.getElementById('scenario-list');
+  if (!currentUid) {
+    list.innerHTML = `<li class="text-xs text-ink-600 font-mono italic p-1">Sign in to save scenarios.</li>`;
+    return;
+  }
+  try {
+    const scenarios = await window.__scenarios.list(currentUid);
+    if (!scenarios.length) {
+      list.innerHTML = `<li class="text-xs text-ink-600 font-mono italic p-1">No saved scenarios yet.</li>`;
+      return;
+    }
+    list.innerHTML = scenarios.map(s => `
+      <li class="flex justify-between items-center bg-ink-900/50 rounded px-2 py-1.5 border border-ink-600/50 gap-2">
+        <button class="text-white text-xs font-mono truncate text-left flex-1 hover:text-cyan-400 transition-colors" onclick="loadScenario('${escapeHtml(s.id)}')" title="Load ${escapeHtml(s.name)}">
+          ${escapeHtml(s.name)}
+        </button>
+        <span class="text-ink-600 text-[10px] font-mono shrink-0">${s.mode === 'portfolio' ? 'PORT' : escapeHtml(s.ticker || '')}</span>
+        <button class="text-ink-600 hover:text-loss transition-colors shrink-0" onclick="deleteScenario('${escapeHtml(s.id)}')" aria-label="Delete ${escapeHtml(s.name)}">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </li>
+    `).join('');
+    window.__scenarioCache = scenarios;
+  } catch (err) {
+    list.innerHTML = `<li class="text-xs text-loss font-mono p-1">Failed to load scenarios.</li>`;
+  }
+}
+
+function loadScenario(id) {
+  const s = (window.__scenarioCache || []).find(x => x.id === id);
+  if (!s) return;
+  clearError();
+  setAppMode(s.mode || 'single');
+  document.getElementById('investment').value = s.investment || 100000;
+  document.getElementById('horizon').value = s.horizon || 252;
+  document.getElementById('simulations').value = s.simulations || 5000;
+
+  if (s.mode === 'portfolio') {
+    portfolioTickers = Array.isArray(s.portfolioTickers) ? [...s.portfolioTickers] : [];
+    updatePortfolioUI();
+  } else {
+    document.getElementById('sim-model').value = s.model || 'gbm';
+    tickerInput.value = s.ticker || '';
+    overrideOn = false;
+    document.getElementById('override-toggle').classList.remove('on');
+    document.getElementById('mu').disabled = true;
+    document.getElementById('sigma').disabled = true;
+    if (s.overrideOn) {
+      toggleOverride();
+      document.getElementById('mu').value = s.mu;
+      document.getElementById('sigma').value = s.sigma;
+      onOverrideSlider();
+    }
+  }
+  runMatrix();
+}
+
+async function deleteScenario(id) {
+  if (!currentUid) return;
+  try {
+    await window.__scenarios.remove(currentUid, id);
+    await refreshScenarioList();
+  } catch (err) {
+    showError('Could not delete scenario: ' + err.message);
   }
 }
 
