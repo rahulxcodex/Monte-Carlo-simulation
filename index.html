@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html><html lang="en" class="dark"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PRO-SIM · Monte Carlo & Portfolio Terminal</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -76,6 +74,24 @@
     },
     remove: async (uid, id) => {
       await deleteDoc(doc(db, 'users', uid, 'scenarios', id));
+    }
+  };
+
+  // Per-user watchlist entries (ticker + alert threshold on a chosen risk
+  // metric), stored at users/{uid}/watchlist/{autoId}.
+  window.__watchlist = {
+    save: async (uid, item) => {
+      const ref = doc(collection(db, 'users', uid, 'watchlist'));
+      await setDoc(ref, { ...item, createdAt: serverTimestamp() });
+      return ref.id;
+    },
+    list: async (uid) => {
+      const q = query(collection(db, 'users', uid, 'watchlist'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+    remove: async (uid, id) => {
+      await deleteDoc(doc(db, 'users', uid, 'watchlist', id));
     }
   };
 
@@ -394,6 +410,51 @@
           <li class="text-xs text-ink-600 font-mono italic p-1">No saved scenarios yet.</li>
         </ul>
       </div>
+
+      <hr class="border-ink-600">
+
+      <!-- Watchlist / Alerts (Firestore, per signed-in user) -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-[11px] uppercase tracking-wider text-ink-600 font-mono">Watchlist / Alerts</p>
+          <button onclick="checkWatchlist()" id="watchlist-check-btn" title="Re-check all thresholds now"
+            class="text-[10px] font-mono uppercase tracking-wider text-ink-600 hover:text-cyan-400 transition-colors flex items-center gap-1">
+            <span id="watchlist-check-spinner" class="hidden spinner spinner-cyan" style="width:10px;height:10px;"></span>
+            Check Now
+          </button>
+        </div>
+
+        <div class="space-y-1.5 mb-2">
+          <input type="text" id="watchlist-ticker" placeholder="Ticker (e.g. AAPL, RELIANCE)"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          <div class="flex gap-1.5">
+            <select id="watchlist-metric" class="flex-1 px-2 py-2 bg-ink-800 border border-ink-600 rounded text-white text-xs font-mono focus:outline-none focus:border-cyan-500">
+              <option value="var95">VaR 95%</option>
+              <option value="var99">VaR 99%</option>
+              <option value="cvar95">CVaR 95%</option>
+              <option value="price">Price</option>
+              <option value="volatility">Volatility (σ)</option>
+              <option value="probability_profit">Prob. of Profit</option>
+            </select>
+            <select id="watchlist-condition" class="px-2 py-2 bg-ink-800 border border-ink-600 rounded text-white text-xs font-mono focus:outline-none focus:border-cyan-500">
+              <option value="below">crosses below</option>
+              <option value="above">crosses above</option>
+            </select>
+          </div>
+          <div class="flex gap-2">
+            <input type="number" id="watchlist-threshold" placeholder="Threshold value"
+              class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <button onclick="addWatchlistItem()" id="watchlist-add-btn"
+              class="bg-ink-700 hover:bg-ink-600 border border-ink-600 px-3 py-2 rounded text-cyan-400 transition-colors shrink-0 text-xs font-mono uppercase tracking-wider">
+              Add
+            </button>
+          </div>
+        </div>
+
+        <ul id="watchlist-list" class="space-y-1.5 max-h-56 overflow-y-auto">
+          <li class="text-xs text-ink-600 font-mono italic p-1">No watchlist items yet.</li>
+        </ul>
+      </div>
     </div>
   </aside>
 
@@ -656,6 +717,7 @@ window.addEventListener('authchange', (e) => {
     document.getElementById('user-email-chip').textContent = user.email || user.displayName || 'Signed in';
     currentUid = user.uid;
     refreshScenarioList();
+    refreshWatchlistList().then(() => checkWatchlist());
     if (!appBooted) {
       appBooted = true;
       setAppMode('single');
@@ -669,6 +731,7 @@ window.addEventListener('authchange', (e) => {
     document.getElementById('auth-password').value = '';
     currentUid = null;
     refreshScenarioList();
+    refreshWatchlistList();
   }
 });
 
@@ -1613,6 +1676,191 @@ async function deleteScenario(id) {
     await refreshScenarioList();
   } catch (err) {
     showError('Could not delete scenario: ' + err.message);
+  }
+}
+
+// ---------- Watchlist / Alerts (Firestore) ----------
+const WATCHLIST_METRIC_LABELS = {
+  var95: 'VaR 95%', var99: 'VaR 99%', cvar95: 'CVaR 95%',
+  price: 'Price', volatility: 'Volatility', probability_profit: 'Prob. Profit'
+};
+
+function watchlistMetricValue(metric, data) {
+  switch (metric) {
+    case 'var95': return data.var95;
+    case 'var99': return data.var99;
+    case 'cvar95': return data.cvar95;
+    case 'price': return data.current_price;
+    case 'volatility': return data.volatility;
+    case 'probability_profit': return data.probability_profit;
+    default: return null;
+  }
+}
+
+function formatWatchlistValue(metric, v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  if (metric === 'volatility' || metric === 'probability_profit') return v.toFixed(2) + '%';
+  if (metric === 'price') return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+async function addWatchlistItem() {
+  if (!currentUid) { showError('Sign in to create watchlist alerts.'); return; }
+  const tickerInputEl = document.getElementById('watchlist-ticker');
+  const ticker = tickerInputEl.value.trim().toUpperCase();
+  const metric = document.getElementById('watchlist-metric').value;
+  const condition = document.getElementById('watchlist-condition').value;
+  const thresholdRaw = document.getElementById('watchlist-threshold').value;
+  const threshold = parseFloat(thresholdRaw);
+
+  if (!ticker) { showError('Enter a ticker for the watchlist alert.'); return; }
+  if (Number.isNaN(threshold)) { showError('Enter a numeric threshold for the watchlist alert.'); return; }
+
+  const btn = document.getElementById('watchlist-add-btn');
+  btn.disabled = true;
+  try {
+    await window.__watchlist.save(currentUid, { ticker, metric, condition, threshold });
+    tickerInputEl.value = '';
+    document.getElementById('watchlist-threshold').value = '';
+    await refreshWatchlistList();
+    checkWatchlist();
+  } catch (err) {
+    showError('Could not add watchlist item: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteWatchlistItem(id) {
+  if (!currentUid) return;
+  try {
+    await window.__watchlist.remove(currentUid, id);
+    await refreshWatchlistList();
+  } catch (err) {
+    showError('Could not remove watchlist item: ' + err.message);
+  }
+}
+
+function renderWatchlistList() {
+  const list = document.getElementById('watchlist-list');
+  const items = window.__watchlistCache || [];
+  if (!currentUid) {
+    list.innerHTML = `<li class="text-xs text-ink-600 font-mono italic p-1">Sign in to use watchlist alerts.</li>`;
+    return;
+  }
+  if (!items.length) {
+    list.innerHTML = `<li class="text-xs text-ink-600 font-mono italic p-1">No watchlist items yet.</li>`;
+    return;
+  }
+  list.innerHTML = items.map(it => {
+    const status = it._status || 'pending';
+    const arrow = it.condition === 'below' ? '↓' : '↑';
+    const label = WATCHLIST_METRIC_LABELS[it.metric] || it.metric;
+    const valText = it._value != null ? formatWatchlistValue(it.metric, it._value) : '…';
+    let badge;
+    if (status === 'alert') {
+      badge = `<span class="text-[9px] font-mono uppercase tracking-wider text-loss bg-loss/15 border border-loss/40 rounded px-1.5 py-0.5 shrink-0 animate-pulse">Alert</span>`;
+    } else if (status === 'ok') {
+      badge = `<span class="text-[9px] font-mono uppercase tracking-wider text-gain bg-gain/10 border border-gain/30 rounded px-1.5 py-0.5 shrink-0">OK</span>`;
+    } else if (status === 'error') {
+      badge = `<span class="text-[9px] font-mono uppercase tracking-wider text-ink-600 border border-ink-600 rounded px-1.5 py-0.5 shrink-0">N/A</span>`;
+    } else {
+      badge = `<span class="text-[9px] font-mono uppercase tracking-wider text-ink-600 border border-ink-600 rounded px-1.5 py-0.5 shrink-0">…</span>`;
+    }
+    return `
+      <li class="bg-ink-900/50 rounded px-2 py-1.5 border ${status === 'alert' ? 'border-loss/40' : 'border-ink-600/50'}">
+        <div class="flex justify-between items-center gap-2">
+          <button class="text-white text-xs font-mono truncate text-left flex-1 hover:text-cyan-400 transition-colors" onclick="loadWatchlistTicker('${escapeHtml(it.ticker)}')" title="Run simulation for ${escapeHtml(it.ticker)}">
+            ${escapeHtml(it.ticker)}
+          </button>
+          ${badge}
+          <button class="text-ink-600 hover:text-loss transition-colors shrink-0" onclick="deleteWatchlistItem('${escapeHtml(it.id)}')" aria-label="Remove ${escapeHtml(it.ticker)} alert">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="text-[10px] text-ink-600 font-mono mt-0.5">
+          ${label} ${arrow} ${formatWatchlistValue(it.metric, it.threshold)} &nbsp;·&nbsp; now: ${valText}
+        </div>
+      </li>
+    `;
+  }).join('');
+}
+
+async function refreshWatchlistList() {
+  if (!currentUid) {
+    window.__watchlistCache = [];
+    renderWatchlistList();
+    return;
+  }
+  try {
+    const items = await window.__watchlist.list(currentUid);
+    window.__watchlistCache = items;
+    renderWatchlistList();
+  } catch (err) {
+    const list = document.getElementById('watchlist-list');
+    list.innerHTML = `<li class="text-xs text-loss font-mono p-1">Failed to load watchlist.</li>`;
+  }
+}
+
+function loadWatchlistTicker(ticker) {
+  clearError();
+  setAppMode('single');
+  tickerInput.value = ticker;
+  runMatrix();
+}
+
+// Requests browser notification permission once, quietly (no-op if
+// unsupported or already decided) so alert badges can also fire a
+// native notification when a threshold is breached.
+function ensureNotificationPermission() {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+}
+
+async function checkWatchlist() {
+  if (!currentUid) return;
+  const items = window.__watchlistCache || [];
+  if (!items.length) return;
+
+  ensureNotificationPermission();
+  const btn = document.getElementById('watchlist-check-btn');
+  const spinner = document.getElementById('watchlist-check-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('hidden');
+
+  const alerts = [];
+  await Promise.all(items.map(async (it) => {
+    try {
+      // The backend's /api/stock endpoint already resolves company names,
+      // popular aliases, and index aliases via resolve_symbol(), so the raw
+      // ticker text the user typed can be passed straight through.
+      const url = `${BACKEND_URL}/api/stock/${encodeURIComponent(it.ticker)}?investment=100000&horizon=252&simulations=3000&model=gbm`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      const value = watchlistMetricValue(it.metric, data);
+      it._value = value;
+      if (value == null || Number.isNaN(value)) {
+        it._status = 'error';
+      } else {
+        const breached = it.condition === 'below' ? value <= it.threshold : value >= it.threshold;
+        it._status = breached ? 'alert' : 'ok';
+        if (breached) alerts.push(it);
+      }
+    } catch (err) {
+      it._status = 'error';
+    }
+  }));
+
+  renderWatchlistList();
+  spinner.classList.add('hidden');
+  btn.disabled = false;
+
+  if (alerts.length && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    const body = alerts.map(a => `${a.ticker}: ${WATCHLIST_METRIC_LABELS[a.metric] || a.metric} ${a.condition === 'below' ? '≤' : '≥'} ${a.threshold}`).join('\n');
+    try { new Notification('PRO-SIM Watchlist Alert', { body }); } catch (e) {}
   }
 }
 
