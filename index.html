@@ -27,6 +27,41 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence,
+    signInWithEmailAndPassword, createUserWithEmailAndPassword,
+    signOut, GoogleAuthProvider, signInWithPopup
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD-JkCCKiEWBAjb8B1vACllKyJsMtzyqqE",
+    authDomain: "movie-blog-f46ea.firebaseapp.com",
+    projectId: "movie-blog-f46ea",
+    storageBucket: "movie-blog-f46ea.firebasestorage.app",
+    messagingSenderId: "348105946958",
+    appId: "1:348105946958:web:29cf44246612e5dcfe101f",
+    measurementId: "G-R4RG2SCXRK"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const googleProvider = new GoogleAuthProvider();
+
+  window.__auth = {
+    signIn: (email, pw) => signInWithEmailAndPassword(auth, email, pw),
+    signUp: (email, pw) => createUserWithEmailAndPassword(auth, email, pw),
+    signInGoogle: () => signInWithPopup(auth, googleProvider),
+    signOut: () => signOut(auth)
+  };
+
+  setPersistence(auth, browserLocalPersistence).then(() => {
+    onAuthStateChanged(auth, (user) => {
+      window.dispatchEvent(new CustomEvent('authchange', { detail: { user } }));
+    });
+  });
+</script>
 
 <style>
   body { background:#070a10; color:#e7ebf2; font-family:'Inter',sans-serif; }
@@ -75,6 +110,36 @@
 </head>
 <body class="h-screen flex flex-col lg:flex-row overflow-hidden antialiased">
 
+  <div id="auth-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 backdrop-blur-sm">
+    <div class="glass-strong rounded-lg p-6 w-full max-w-sm mx-4">
+      <h2 class="font-display text-lg font-bold text-white flex items-center gap-2 mb-1">
+        <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+        PRO-SIM
+      </h2>
+      <p id="auth-subtitle" class="text-xs text-ink-600 font-mono mb-4">Sign in to continue</p>
+      <div class="flex gap-2 mb-4 text-[11px] font-mono uppercase tracking-wider">
+        <button id="auth-tab-signin" onclick="setAuthTab('signin')" class="flex-1 py-1.5 rounded border mode-active">Sign In</button>
+        <button id="auth-tab-signup" onclick="setAuthTab('signup')" class="flex-1 py-1.5 rounded border mode-inactive">Sign Up</button>
+      </div>
+      <div class="space-y-3">
+        <input id="auth-email" type="email" autocomplete="username" placeholder="Email"
+          class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+        <input id="auth-password" type="password" autocomplete="current-password" placeholder="Password"
+          class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+        <p id="auth-error" class="text-xs text-loss font-mono hidden"></p>
+        <button id="auth-submit-btn" onclick="submitAuth()"
+          class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-ink-950 text-sm font-semibold font-mono transition-colors flex items-center justify-center gap-2">
+          <span id="auth-submit-label">Sign In</span>
+          <div id="auth-spinner" class="spinner hidden"></div>
+        </button>
+        <div class="flex items-center gap-2 text-[10px] text-ink-600 font-mono"><hr class="flex-1 border-ink-600"><span>OR</span><hr class="flex-1 border-ink-600"></div>
+        <button onclick="signInGoogle()" class="w-full py-2 rounded border border-ink-600 hover:border-cyan-500/50 text-white text-sm font-mono transition-colors">
+          Continue with Google
+        </button>
+      </div>
+    </div>
+  </div>
+
   <aside class="w-full lg:w-[22rem] glass-strong flex flex-col z-20 flex-shrink-0 lg:h-full max-h-[46vh] lg:max-h-full overflow-y-auto relative">
     
     <!-- Title & Mode Switcher -->
@@ -84,6 +149,10 @@
         PRO-SIM
         <span class="ml-auto text-[10px] font-mono font-normal tracking-widest text-ink-600 border border-ink-600 rounded px-1.5 py-0.5" id="status-pill">OFFLINE</span>
       </h1>
+      <div class="flex items-center justify-between text-[10px] font-mono text-ink-600 mb-4 -mt-2">
+        <span id="user-email-chip" class="truncate max-w-[12rem]"></span>
+        <button onclick="doSignOut()" class="uppercase tracking-wider hover:text-cyan-400 transition-colors">Sign Out</button>
+      </div>
       
       <div class="flex rounded-md bg-ink-800 p-1 border border-ink-600">
         <button onclick="setAppMode('single')" id="btn-mode-single" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single Asset</button>
@@ -407,6 +476,95 @@ let overrideOn = false;
 let compareOn = false;
 let suggestIndex = -1;
 let searchDebounce = null;
+
+// ---------- auth ----------
+let authTab = 'signin';
+
+function setAuthTab(tab) {
+  authTab = tab;
+  document.getElementById('auth-tab-signin').className = `flex-1 py-1.5 rounded border ${tab === 'signin' ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('auth-tab-signup').className = `flex-1 py-1.5 rounded border ${tab === 'signup' ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('auth-subtitle').textContent = tab === 'signin' ? 'Sign in to continue' : 'Create an account to continue';
+  document.getElementById('auth-submit-label').textContent = tab === 'signin' ? 'Sign In' : 'Create Account';
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function submitAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pw = document.getElementById('auth-password').value;
+  if (!email || !pw) { showAuthError('Enter an email and password.'); return; }
+  document.getElementById('auth-error').classList.add('hidden');
+  document.getElementById('auth-spinner').classList.remove('hidden');
+  document.getElementById('auth-submit-btn').disabled = true;
+  try {
+    if (authTab === 'signin') {
+      await window.__auth.signIn(email, pw);
+    } else {
+      await window.__auth.signUp(email, pw);
+    }
+  } catch (err) {
+    showAuthError(friendlyAuthError(err));
+  } finally {
+    document.getElementById('auth-spinner').classList.add('hidden');
+    document.getElementById('auth-submit-btn').disabled = false;
+  }
+}
+
+async function signInGoogle() {
+  document.getElementById('auth-error').classList.add('hidden');
+  try {
+    await window.__auth.signInGoogle();
+  } catch (err) {
+    showAuthError(friendlyAuthError(err));
+  }
+}
+
+async function doSignOut() {
+  try { await window.__auth.signOut(); } catch (err) { console.error(err); }
+}
+
+function friendlyAuthError(err) {
+  const code = err && err.code || '';
+  const map = {
+    'auth/invalid-email': 'That email address looks invalid.',
+    'auth/user-not-found': 'No account found with that email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/email-already-in-use': 'An account already exists for that email.',
+    'auth/weak-password': 'Password should be at least 6 characters.',
+    'auth/popup-closed-by-user': 'Sign-in popup closed before completing.'
+  };
+  return map[code] || 'Something went wrong. Please try again.';
+}
+
+// Firebase (loaded as a module above) dispatches this whenever auth state
+// resolves or changes — on load (session restore), sign-in, sign-up, or
+// sign-out. This gates the app: the overlay stays up until Firebase confirms
+// a signed-in user, and the app only initializes once, the first time a user
+// is seen.
+let appBooted = false;
+window.addEventListener('authchange', (e) => {
+  const user = e.detail.user;
+  const overlay = document.getElementById('auth-overlay');
+  if (user) {
+    overlay.classList.add('hidden');
+    document.getElementById('user-email-chip').textContent = user.email || user.displayName || 'Signed in';
+    if (!appBooted) {
+      appBooted = true;
+      setAppMode('single');
+    }
+  } else {
+    overlay.classList.remove('hidden');
+    document.getElementById('auth-email').value = '';
+    document.getElementById('auth-password').value = '';
+  }
+});
 
 // ---------- helpers ----------
 // Escapes text before it's ever interpolated into innerHTML, preventing broken
@@ -1016,9 +1174,9 @@ function runClientSimulation() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  setAppMode('single');
-});
+// setAppMode('single') now runs from the authchange handler above, once a
+// user is confirmed signed in, instead of unconditionally on page load — so
+// the dashboard doesn't initialize behind the auth overlay.
 </script>
 </body>
 </html>
