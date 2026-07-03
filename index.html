@@ -313,32 +313,6 @@
         </p>
       </div>
 
-      <!-- TOP PERFORMERS SECTION (Hidden by default) -->
-      <div id="sidebar-leaderboard" class="hidden flex-col gap-4">
-        <div>
-          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Period</label>
-          <select id="leaderboard-period" onchange="fetchLeaderboard()"
-            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
-            <option value="1y">1 Year</option>
-            <option value="2y">2 Years</option>
-            <option value="3y">3 Years</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Show</label>
-          <select id="leaderboard-limit" onchange="fetchLeaderboard()"
-            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
-            <option value="5">Top 5</option>
-            <option value="10" selected>Top 10</option>
-            <option value="20">Top 20</option>
-            <option value="50">Top 50</option>
-          </select>
-        </div>
-        <p class="text-[10px] text-ink-600 leading-relaxed font-mono">
-          Ranked by % price return over the selected period across NSE-listed equities. Recomputed server-side roughly once a day.
-        </p>
-      </div>
-
       <!-- SINGLE ASSET INFO SECTION -->
       <div id="sidebar-single-info" class="flex flex-col gap-6">
         <div class="flex gap-2">
@@ -461,6 +435,32 @@
       <div id="error-message" class="hidden text-xs text-loss bg-loss/10 p-2.5 rounded border border-loss/30 font-mono leading-relaxed"></div>
 
       </div><!-- /#sidebar-sim-controls -->
+
+      <!-- TOP PERFORMERS SECTION (Hidden by default) -->
+      <div id="sidebar-leaderboard" class="hidden flex-col gap-4">
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Period</label>
+          <select id="leaderboard-period" onchange="fetchLeaderboard()"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="1y">1 Year</option>
+            <option value="2y">2 Years</option>
+            <option value="3y">3 Years</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Show</label>
+          <select id="leaderboard-limit" onchange="fetchLeaderboard()"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="5">Top 5</option>
+            <option value="10" selected>Top 10</option>
+            <option value="20">Top 20</option>
+            <option value="50">Top 50</option>
+          </select>
+        </div>
+        <p class="text-[10px] text-ink-600 leading-relaxed font-mono">
+          Ranked by % price return over the selected period across NSE-listed equities. Recomputed server-side roughly once a day.
+        </p>
+      </div>
 
       <hr class="border-ink-600">
 
