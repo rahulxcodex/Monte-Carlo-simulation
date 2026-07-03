@@ -96,22 +96,33 @@
     }
   };
 
-  // Per-user portfolio holdings (ticker + quantity held + average buy price),
-  // stored at users/{uid}/holdings/{autoId}. This backs the "My Holdings"
-  // homepage where a user tracks real positions and their live performance.
-  window.__holdings = {
+  // Per-user portfolio transactions (ticker + buy/sell + quantity + price),
+  // stored at users/{uid}/transactions/{autoId}. "My Holdings" is derived by
+  // aggregating these into open-position lots (FIFO) instead of storing a
+  // single mutable position — this is what lets it show realized P&L on
+  // sells over time, not just the currently open quantity.
+  window.__transactions = {
     save: async (uid, item) => {
-      const ref = doc(collection(db, 'users', uid, 'holdings'));
+      const ref = doc(collection(db, 'users', uid, 'transactions'));
       await setDoc(ref, { ...item, createdAt: serverTimestamp() });
       return ref.id;
     },
+    saveMany: async (uid, items) => {
+      const ids = [];
+      for (const item of items) {
+        const ref = doc(collection(db, 'users', uid, 'transactions'));
+        await setDoc(ref, { ...item, createdAt: serverTimestamp() });
+        ids.push(ref.id);
+      }
+      return ids;
+    },
     list: async (uid) => {
-      const q = query(collection(db, 'users', uid, 'holdings'), orderBy('createdAt', 'desc'));
+      const q = query(collection(db, 'users', uid, 'transactions'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     },
     remove: async (uid, id) => {
-      await deleteDoc(doc(db, 'users', uid, 'holdings', id));
+      await deleteDoc(doc(db, 'users', uid, 'transactions', id));
     }
   };
 
@@ -489,6 +500,24 @@
         <ul id="watchlist-list" class="space-y-1.5 max-h-56 overflow-y-auto">
           <li class="text-xs text-ink-600 font-mono italic p-1">No watchlist items yet.</li>
         </ul>
+
+        <!-- Email digest opt-in — server-side daily check, so alerts still
+             fire even when this tab isn't open. -->
+        <div class="mt-2 pt-2 border-t border-ink-600/50">
+          <label class="flex items-center gap-1.5 text-[10px] text-ink-600 font-mono cursor-pointer mb-1.5">
+            <input type="checkbox" id="watchlist-digest-enabled" onchange="onDigestToggle()" class="accent-cyan-500">
+            Email me a daily digest of breached alerts
+          </label>
+          <div id="watchlist-digest-email-row" class="hidden flex gap-1.5">
+            <input type="email" id="watchlist-digest-email" placeholder="you@example.com"
+              class="flex-1 px-2 py-1.5 bg-ink-800 border border-ink-600 rounded text-white text-[11px] focus:outline-none focus:border-cyan-500 font-mono"
+              onchange="saveDigestSubscription()">
+            <button onclick="sendTestDigestEmail()" id="watchlist-digest-test-btn"
+              class="text-[10px] font-mono uppercase tracking-wider text-ink-600 hover:text-cyan-400 transition-colors border border-ink-600 rounded px-2 shrink-0">
+              Test
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </aside>
@@ -635,10 +664,20 @@
     <!-- ================= MY HOLDINGS (HOMEPAGE) VIEW ================= -->
     <div id="view-holdings" class="hidden flex-col h-full">
 
-      <!-- Add Holding Form -->
+      <!-- Add Transaction Form -->
       <div class="glass p-4 rounded-lg mb-4">
-        <p class="text-[11px] uppercase tracking-wider text-ink-600 mb-2 font-mono">Add a Holding</p>
-        <div class="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-start">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-[11px] uppercase tracking-wider text-ink-600 font-mono">Record a Trade</p>
+          <button onclick="toggleCsvImport()" id="csv-toggle-btn"
+            class="text-[10px] font-mono uppercase tracking-wider text-ink-600 hover:text-cyan-400 transition-colors">
+            Import CSV ▾
+          </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-[auto_2fr_1fr_1fr_1fr_auto] gap-2 items-start">
+          <select id="holding-type" class="px-2 py-2 bg-ink-800 border border-ink-600 rounded text-white text-xs font-mono focus:outline-none focus:border-cyan-500">
+            <option value="buy">Buy</option>
+            <option value="sell">Sell</option>
+          </select>
           <div class="relative z-20">
             <input type="text" id="holding-ticker" autocomplete="off" placeholder="Ticker or company name…"
               class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono uppercase">
@@ -646,20 +685,37 @@
           </div>
           <input type="number" id="holding-qty" placeholder="Quantity" min="0" step="any"
             class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
-          <input type="number" id="holding-avgprice" placeholder="Avg. buy price" min="0" step="any"
+          <input type="number" id="holding-avgprice" placeholder="Price" min="0" step="any"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+          <input type="date" id="holding-date"
             class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
           <button onclick="addHolding()" id="holding-add-btn"
             class="bg-cyan-600 hover:bg-cyan-500 text-ink-950 px-4 py-2 rounded transition-colors shrink-0 text-xs font-mono font-bold uppercase tracking-wider">
             Add
           </button>
         </div>
-        <p class="text-[10px] text-ink-600 font-mono mt-2">Avg. buy price is per unit, in the asset's own currency (e.g. USD for AAPL, INR for RELIANCE.NS).</p>
+        <p class="text-[10px] text-ink-600 font-mono mt-2">Price is per unit, in the asset's own currency (e.g. USD for AAPL, INR for RELIANCE.NS). Date defaults to today if left blank.</p>
+
+        <!-- CSV import panel -->
+        <div id="csv-import-panel" class="hidden mt-3 pt-3 border-t border-ink-600/50">
+          <p class="text-[10px] text-ink-600 font-mono mb-1.5">
+            Paste rows as <span class="text-cyan-400">ticker,type,quantity,price,date</span> (type &amp; date optional — defaults to buy / today). One trade per line.
+          </p>
+          <textarea id="csv-import-text" rows="4" placeholder="AAPL,buy,10,180.5,2025-01-15&#10;RELIANCE.NS,sell,5,2450,2025-03-02&#10;TCS.NS,20,3800"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-xs font-mono focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"></textarea>
+          <div class="flex justify-end mt-2">
+            <button onclick="importHoldingsCsv()" id="csv-import-btn"
+              class="bg-ink-700 hover:bg-ink-600 border border-ink-600 px-4 py-2 rounded text-cyan-400 transition-colors text-xs font-mono uppercase tracking-wider">
+              Import Trades
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Summary cards -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Invested</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Invested (Open)</p>
           <p id="hold-invested" class="text-xl font-bold font-mono text-white mt-1">₹0.00</p>
         </div>
         <div class="glass p-4 rounded-lg">
@@ -667,19 +723,23 @@
           <p id="hold-current" class="text-xl font-bold font-mono text-white mt-1">₹0.00</p>
         </div>
         <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Total Gain / Loss</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Unrealized Gain / Loss</p>
           <p id="hold-gain" class="text-xl font-bold font-mono mt-1">₹0.00</p>
         </div>
         <div class="glass p-4 rounded-lg">
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Return</p>
           <p id="hold-gain-pct" class="text-xl font-bold font-mono mt-1">0.0%</p>
         </div>
+        <div class="glass p-4 rounded-lg">
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Realized P&amp;L</p>
+          <p id="hold-realized" class="text-xl font-bold font-mono mt-1">₹0.00</p>
+        </div>
       </div>
 
       <!-- Holdings table -->
       <div class="glass rounded-lg flex-1 flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-4 py-3 border-b border-ink-600 bg-ink-800/40">
-          <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Your Assets</p>
+          <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Open Positions</p>
           <button onclick="refreshHoldingsPrices()" id="holdings-refresh-btn"
             class="text-[10px] font-mono uppercase tracking-wider text-ink-600 hover:text-cyan-400 transition-colors flex items-center gap-1.5">
             <span id="holdings-refresh-spinner" class="hidden spinner spinner-cyan" style="width:10px;height:10px;"></span>
@@ -691,17 +751,32 @@
             <thead>
               <tr class="text-ink-600 uppercase text-[10px] tracking-wider text-left border-b border-ink-600">
                 <th class="px-4 py-2 font-normal">Asset</th>
-                <th class="px-4 py-2 font-normal text-right">Qty</th>
+                <th class="px-4 py-2 font-normal text-right">Qty Open</th>
                 <th class="px-4 py-2 font-normal text-right">Avg. Cost</th>
                 <th class="px-4 py-2 font-normal text-right">Price</th>
                 <th class="px-4 py-2 font-normal text-right">Value</th>
-                <th class="px-4 py-2 font-normal text-right">Gain / Loss</th>
+                <th class="px-4 py-2 font-normal text-right">Unrealized</th>
+                <th class="px-4 py-2 font-normal text-right">Realized</th>
                 <th class="px-4 py-2 font-normal text-right">Weight</th>
                 <th class="px-4 py-2 font-normal"></th>
               </tr>
             </thead>
             <tbody id="holdings-table-body">
-              <tr><td colspan="8" class="text-center text-ink-600 italic p-6">No holdings yet — add your first asset above.</td></tr>
+              <tr><td colspan="9" class="text-center text-ink-600 italic p-6">No holdings yet — record your first trade above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Transaction history -->
+      <div class="glass rounded-lg flex flex-col overflow-hidden mt-4 max-h-56">
+        <div class="flex items-center justify-between px-4 py-2 border-b border-ink-600 bg-ink-800/40 shrink-0">
+          <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Trade History</p>
+        </div>
+        <div class="overflow-y-auto flex-1">
+          <table class="w-full text-xs font-mono">
+            <tbody id="transactions-table-body">
+              <tr><td class="text-center text-ink-600 italic p-4">No trades recorded yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -868,8 +943,9 @@ window.addEventListener('authchange', (e) => {
     document.getElementById('user-email-chip').textContent = user.email || user.displayName || 'Signed in';
     document.getElementById('sign-out-btn').textContent = 'Sign Out';
     currentUid = user.uid;
+    window.__lastAuthUser = user;
     refreshScenarioList();
-    refreshWatchlistList().then(() => checkWatchlist());
+    refreshWatchlistList().then(() => { checkWatchlist(); initDigestUi(); });
     refreshHoldingsList();
     if (!appBooted) {
       appBooted = true;
@@ -1931,6 +2007,7 @@ async function addWatchlistItem() {
     document.getElementById('watchlist-threshold').value = '';
     await refreshWatchlistList();
     checkWatchlist();
+    saveDigestSubscription();
   } catch (err) {
     showError('Could not add watchlist item: ' + err.message);
   } finally {
@@ -1943,6 +2020,7 @@ async function deleteWatchlistItem(id) {
   try {
     await window.__watchlist.remove(currentUid, id);
     await refreshWatchlistList();
+    saveDigestSubscription();
   } catch (err) {
     showError('Could not remove watchlist item: ' + err.message);
   }
@@ -2071,79 +2149,247 @@ async function checkWatchlist() {
   }
 }
 
-// ---------- My Holdings (Homepage portfolio tracker) ----------
-window.__holdingsCache = [];
-let holdingsQuoteCache = {}; // ticker -> quote response, refreshed on demand
+// ---------- Email Digest Subscription (server-side daily check) ----------
+// Local prefs (enabled + email) are kept in localStorage per-uid since they're
+// just UI convenience state; the source of truth for *what* to check lives in
+// Firestore's watchlist, which we push to the backend on every change.
+function digestPrefsKey() { return currentUid ? `prosim-digest-${currentUid}` : null; }
 
-async function addHolding() {
-  if (!currentUid) { showError('Sign in to build your holdings portfolio.'); return; }
-  const tickerRaw = holdingTickerInput.value.trim();
-  const ticker = resolveTypedTicker(tickerRaw);
-  const qty = parseFloat(document.getElementById('holding-qty').value);
-  const avgPrice = parseFloat(document.getElementById('holding-avgprice').value);
+function loadDigestPrefs() {
+  const key = digestPrefsKey();
+  if (!key) return { enabled: false, email: '' };
+  try {
+    return JSON.parse(localStorage.getItem(key)) || { enabled: false, email: '' };
+  } catch (e) {
+    return { enabled: false, email: '' };
+  }
+}
 
-  if (!ticker) { showError('Enter a ticker for the holding.'); return; }
-  if (!TICKER_PATTERN.test(ticker)) { showError(`"${tickerRaw}" isn't a ticker symbol — pick a match from the suggestions list instead.`); return; }
-  if (!(qty > 0)) { showError('Enter a valid quantity greater than 0.'); return; }
-  if (!(avgPrice > 0)) { showError('Enter a valid average buy price greater than 0.'); return; }
+function saveDigestPrefsLocal(prefs) {
+  const key = digestPrefsKey();
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify(prefs)); } catch (e) {}
+}
 
-  const btn = document.getElementById('holding-add-btn');
+function initDigestUi() {
+  const prefs = loadDigestPrefs();
+  const enabledEl = document.getElementById('watchlist-digest-enabled');
+  const emailEl = document.getElementById('watchlist-digest-email');
+  const rowEl = document.getElementById('watchlist-digest-email-row');
+  enabledEl.checked = !!prefs.enabled;
+  emailEl.value = prefs.email || (window.__lastAuthUser && window.__lastAuthUser.email) || '';
+  rowEl.classList.toggle('hidden', !prefs.enabled);
+}
+
+function onDigestToggle() {
+  const enabled = document.getElementById('watchlist-digest-enabled').checked;
+  document.getElementById('watchlist-digest-email-row').classList.toggle('hidden', !enabled);
+  saveDigestSubscription();
+}
+
+async function saveDigestSubscription() {
+  if (!currentUid) return;
+  const enabled = document.getElementById('watchlist-digest-enabled').checked;
+  const email = document.getElementById('watchlist-digest-email').value.trim();
+  saveDigestPrefsLocal({ enabled, email });
+
+  if (!enabled) {
+    try { await fetch(`${BACKEND_URL}/api/alerts/unsubscribe`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: currentUid })
+    }); } catch (e) {}
+    return;
+  }
+  if (!email) return;
+
+  const items = (window.__watchlistCache || []).map(it => ({
+    ticker: it.ticker, metric: it.metric, condition: it.condition, threshold: it.threshold
+  }));
+  try {
+    await fetch(`${BACKEND_URL}/api/alerts/subscribe`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: currentUid, email, items })
+    });
+  } catch (e) {
+    showError('Could not save email digest subscription: ' + e.message);
+  }
+}
+
+async function sendTestDigestEmail() {
+  const email = document.getElementById('watchlist-digest-email').value.trim();
+  if (!email) { showError('Enter an email address first.'); return; }
+  const btn = document.getElementById('watchlist-digest-test-btn');
   btn.disabled = true;
   try {
     clearError();
-    await window.__holdings.save(currentUid, {
-      ticker,
-      name: holdingTickerInput.dataset.name || ticker,
-      quantity: qty,
-      avgPrice: avgPrice
+    const res = await fetch(`${BACKEND_URL}/api/alerts/send-test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
     });
-    holdingTickerInput.value = '';
-    holdingTickerInput.dataset.name = '';
-    document.getElementById('holding-qty').value = '';
-    document.getElementById('holding-avgprice').value = '';
-    await refreshHoldingsList();
-    refreshHoldingsPrices();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || 'send failed');
+    }
   } catch (err) {
-    showError('Could not add holding: ' + err.message);
+    showError('Test email failed: ' + err.message + ' (server SMTP may not be configured)');
   } finally {
     btn.disabled = false;
   }
 }
 
+// ---------- My Holdings (Homepage portfolio tracker) ----------
+// Data model: every Buy/Sell is a row in the `transactions` collection.
+// Positions are *derived* from these via FIFO lot matching, so selling part
+// or all of a position doesn't destroy history — realized P&L on the sold
+// portion accumulates, and any remaining quantity keeps its correct
+// remaining cost basis for unrealized P&L.
+window.__transactionsCache = [];
+window.__holdingsCache = [];      // derived open-position aggregates, kept for compatibility with existing renderers
+let holdingsQuoteCache = {};      // ticker -> quote response, refreshed on demand
+
+const holdingTypeInput = document.getElementById('holding-type');
+const holdingDateInput = document.getElementById('holding-date');
+
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+async function addHolding() {
+  if (!currentUid) { showError('Sign in to build your holdings portfolio.'); return; }
+  const tickerRaw = holdingTickerInput.value.trim();
+  const ticker = resolveTypedTicker(tickerRaw);
+  const type = holdingTypeInput.value === 'sell' ? 'sell' : 'buy';
+  const qty = parseFloat(document.getElementById('holding-qty').value);
+  const price = parseFloat(document.getElementById('holding-avgprice').value);
+  const date = holdingDateInput.value || todayIso();
+
+  if (!ticker) { showError('Enter a ticker for the trade.'); return; }
+  if (!TICKER_PATTERN.test(ticker)) { showError(`"${tickerRaw}" isn't a ticker symbol — pick a match from the suggestions list instead.`); return; }
+  if (!(qty > 0)) { showError('Enter a valid quantity greater than 0.'); return; }
+  if (!(price > 0)) { showError('Enter a valid price greater than 0.'); return; }
+
+  if (type === 'sell') {
+    const openQty = openQuantityFor(ticker);
+    if (qty > openQty + 1e-9) {
+      showError(`Can't sell ${fmt2.format(qty)} of ${ticker} — only ${fmt2.format(openQty)} currently open.`);
+      return;
+    }
+  }
+
+  const btn = document.getElementById('holding-add-btn');
+  btn.disabled = true;
+  try {
+    clearError();
+    await window.__transactions.save(currentUid, {
+      ticker, type, quantity: qty, price,
+      name: holdingTickerInput.dataset.name || ticker,
+      date
+    });
+    holdingTickerInput.value = '';
+    holdingTickerInput.dataset.name = '';
+    document.getElementById('holding-qty').value = '';
+    document.getElementById('holding-avgprice').value = '';
+    holdingDateInput.value = '';
+    await refreshHoldingsList();
+    refreshHoldingsPrices();
+  } catch (err) {
+    showError('Could not record trade: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function openQuantityFor(ticker) {
+  const txs = (window.__transactionsCache || []).filter(t => t.ticker === ticker);
+  let qty = 0;
+  txs.forEach(t => { qty += t.type === 'sell' ? -t.quantity : t.quantity; });
+  return Math.max(0, qty);
+}
+
 // Best-effort resolution for whatever the person left in the ticker box —
 // mirrors the "Enter picks the top suggestion" behavior of the other search
 // boxes, but falls back to their raw (uppercased) text if suggestions never
-// loaded, so a fast typer isn't blocked from adding a holding.
+// loaded, so a fast typer isn't blocked from adding a trade.
 function resolveTypedTicker(raw) {
   const rows = holdingSuggestBox.querySelectorAll('.suggest-row');
   if (rows.length) return rows[0].dataset.ticker;
   return raw.toUpperCase();
 }
 
-async function deleteHolding(id) {
+async function deleteHolding(txId) {
   if (!currentUid) return;
   try {
-    await window.__holdings.remove(currentUid, id);
+    await window.__transactions.remove(currentUid, txId);
     await refreshHoldingsList();
   } catch (err) {
-    showError('Could not remove holding: ' + err.message);
+    showError('Could not remove trade: ' + err.message);
   }
 }
 
 async function refreshHoldingsList() {
   if (!currentUid) {
+    window.__transactionsCache = [];
     window.__holdingsCache = [];
     renderHoldings();
     return;
   }
   try {
-    window.__holdingsCache = await window.__holdings.list(currentUid);
+    window.__transactionsCache = await window.__transactions.list(currentUid);
+    window.__holdingsCache = aggregatePositions(window.__transactionsCache);
     renderHoldings();
     refreshHoldingsPrices();
   } catch (err) {
     const body = document.getElementById('holdings-table-body');
-    body.innerHTML = `<tr><td colspan="8" class="text-center text-loss p-6">Failed to load holdings.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" class="text-center text-loss p-6">Failed to load holdings.</td></tr>`;
   }
+}
+
+// FIFO lot matching: walks each ticker's trades oldest→newest, consuming buy
+// lots as sells occur. Produces, per ticker: remaining open quantity + its
+// weighted average cost (for unrealized P&L) and cumulative realized P&L
+// from all matched sells (for realized P&L) — this is what makes selling
+// partial or full positions show up correctly instead of only ever
+// reflecting the current open position.
+function aggregatePositions(transactions) {
+  const byTicker = {};
+  transactions.forEach(t => { (byTicker[t.ticker] = byTicker[t.ticker] || []).push(t); });
+
+  const positions = [];
+  Object.keys(byTicker).forEach(ticker => {
+    const txs = [...byTicker[ticker]].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const lots = []; // { qty, price }
+    let realized = 0;
+    let name = ticker;
+
+    txs.forEach(t => {
+      name = t.name || name;
+      if (t.type === 'sell') {
+        let remaining = t.quantity;
+        while (remaining > 1e-9 && lots.length) {
+          const lot = lots[0];
+          const used = Math.min(lot.qty, remaining);
+          realized += (t.price - lot.price) * used;
+          lot.qty -= used;
+          remaining -= used;
+          if (lot.qty <= 1e-9) lots.shift();
+        }
+        // Selling more than recorded buys (e.g. imported partial history) —
+        // treat the excess as realized against a zero-cost-basis lot rather
+        // than silently dropping it, so the P&L total isn't understated.
+        if (remaining > 1e-9) realized += t.price * remaining;
+      } else {
+        lots.push({ qty: t.quantity, price: t.price });
+      }
+    });
+
+    const openQty = lots.reduce((s, l) => s + l.qty, 0);
+    const costBasis = lots.reduce((s, l) => s + l.qty * l.price, 0);
+    const avgPrice = openQty > 1e-9 ? costBasis / openQty : 0;
+
+    if (openQty > 1e-9 || Math.abs(realized) > 1e-9) {
+      positions.push({ id: ticker, ticker, name, quantity: openQty, avgPrice, realized });
+    }
+  });
+
+  return positions.sort((a, b) => a.ticker.localeCompare(b.ticker));
 }
 
 async function refreshHoldingsPrices() {
@@ -2176,28 +2422,56 @@ function renderHoldings() {
   const items = window.__holdingsCache || [];
 
   if (!currentUid) {
-    body.innerHTML = `<tr><td colspan="8" class="text-center text-ink-600 italic p-6">Sign in to build and track your holdings portfolio.</td></tr>`;
-    setHoldingsSummary(0, 0);
+    body.innerHTML = `<tr><td colspan="9" class="text-center text-ink-600 italic p-6">Sign in to build and track your holdings portfolio.</td></tr>`;
+    setHoldingsSummary(0, 0, 0);
     Plotly.purge('chart-holdings-alloc');
+    renderTransactionHistory();
     return;
   }
   if (!items.length) {
-    body.innerHTML = `<tr><td colspan="8" class="text-center text-ink-600 italic p-6">No holdings yet — add your first asset above.</td></tr>`;
-    setHoldingsSummary(0, 0);
+    body.innerHTML = `<tr><td colspan="9" class="text-center text-ink-600 italic p-6">No holdings yet — record your first trade above.</td></tr>`;
+    setHoldingsSummary(0, 0, 0);
     Plotly.purge('chart-holdings-alloc');
+    renderTransactionHistory();
     return;
   }
 
   let totalInvestedInr = 0;
   let totalCurrentInr = 0;
+  let totalRealizedInr = 0;
   const rows = [];
   const allocLabels = [];
   const allocValues = [];
 
   items.forEach(it => {
     const q = holdingsQuoteCache[it.ticker];
-    const investedNative = it.quantity * it.avgPrice;
     const fx = q ? (q.exchange_rate_to_inr || 1) : 1;
+    const realizedInr = it.realized * fx;
+    totalRealizedInr += realizedInr;
+    const realizedClass = it.realized >= 0 ? 'text-gain' : 'text-loss';
+    const realizedCell = `<td class="px-4 py-2.5 text-right ${realizedClass}">${it.realized !== 0 ? (it.realized >= 0 ? '+' : '') + fmt2.format(it.realized) : '—'}</td>`;
+
+    if (it.quantity <= 1e-9) {
+      // Fully closed position — still shown so realized P&L stays visible,
+      // but with no open-quantity row of its own to simulate/refresh price for.
+      rows.push(`
+        <tr class="border-b border-ink-600/50 hover:bg-ink-800/30 opacity-70">
+          <td class="px-4 py-2.5">
+            <p class="text-white">${escapeHtml(it.name || it.ticker)}</p>
+            <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)} · closed</p>
+          </td>
+          <td class="px-4 py-2.5 text-right">0</td>
+          <td class="px-4 py-2.5 text-right text-ink-600" colspan="4">Position closed</td>
+          ${realizedCell}
+          <td class="px-4 py-2.5 text-right">—</td>
+          <td class="px-4 py-2.5 text-right">
+            <button class="text-ink-600 hover:text-cyan-400 transition-colors" onclick="viewHoldingTrades('${escapeHtml(it.ticker)}')" title="View trades">≡</button>
+          </td>
+        </tr>`);
+      return;
+    }
+
+    const investedNative = it.quantity * it.avgPrice;
     const investedInr = investedNative * fx;
     totalInvestedInr += investedInr;
 
@@ -2210,9 +2484,11 @@ function renderHoldings() {
           </td>
           <td class="px-4 py-2.5 text-right">${fmt2.format(it.quantity)}</td>
           <td class="px-4 py-2.5 text-right">${fmt2.format(it.avgPrice)}</td>
-          <td class="px-4 py-2.5 text-right text-ink-600" colspan="4">Price unavailable</td>
+          <td class="px-4 py-2.5 text-right text-ink-600" colspan="3">Price unavailable</td>
+          ${realizedCell}
+          <td class="px-4 py-2.5 text-right">—</td>
           <td class="px-4 py-2.5 text-right">
-            <button class="text-ink-600 hover:text-loss transition-colors" onclick="deleteHolding('${escapeHtml(it.id)}')" aria-label="Remove ${escapeHtml(it.ticker)}">✕</button>
+            <button class="text-ink-600 hover:text-cyan-400 transition-colors" onclick="viewHoldingTrades('${escapeHtml(it.ticker)}')" title="View trades">≡</button>
           </td>
         </tr>`);
       return;
@@ -2240,9 +2516,11 @@ function renderHoldings() {
         <td class="px-4 py-2.5 text-right">${ccy}${fmt2.format(q.current_price)}</td>
         <td class="px-4 py-2.5 text-right">${ccy}${fmt2.format(currentNative)}</td>
         <td class="px-4 py-2.5 text-right ${gainClass}">${gainNative >= 0 ? '+' : ''}${ccy}${fmt2.format(gainNative)} <span class="text-[10px]">(${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)</span></td>
+        ${realizedCell}
         <td class="px-4 py-2.5 text-right" id="hold-weight-${escapeHtml(it.id)}">—</td>
-        <td class="px-4 py-2.5 text-right">
-          <button class="text-ink-600 hover:text-loss transition-colors" onclick="deleteHolding('${escapeHtml(it.id)}')" aria-label="Remove ${escapeHtml(it.ticker)}">✕</button>
+        <td class="px-4 py-2.5 text-right whitespace-nowrap">
+          <button class="text-cyan-400 hover:text-cyan-300 transition-colors text-[10px] font-mono uppercase tracking-wider mr-2" onclick="simulateHolding('${escapeHtml(it.ticker)}', ${it.quantity}, ${it.avgPrice})" title="Run a Monte Carlo simulation using this position's quantity & avg. price">Simulate</button>
+          <button class="text-ink-600 hover:text-loss transition-colors" onclick="deleteHoldingPosition('${escapeHtml(it.ticker)}')" aria-label="Remove ${escapeHtml(it.ticker)}">✕</button>
         </td>
       </tr>`);
   });
@@ -2252,7 +2530,7 @@ function renderHoldings() {
   // Fill in weight % now that we know the portfolio total
   items.forEach(it => {
     const q = holdingsQuoteCache[it.ticker];
-    if (!q) return;
+    if (!q || it.quantity <= 1e-9) return;
     const fx = q.exchange_rate_to_inr || 1;
     const currentInr = it.quantity * q.current_price * fx;
     const weight = totalCurrentInr > 0 ? (currentInr / totalCurrentInr) * 100 : 0;
@@ -2260,11 +2538,66 @@ function renderHoldings() {
     if (cell) cell.textContent = weight.toFixed(1) + '%';
   });
 
-  setHoldingsSummary(totalInvestedInr, totalCurrentInr);
+  setHoldingsSummary(totalInvestedInr, totalCurrentInr, totalRealizedInr);
   renderHoldingsAllocationChart(allocLabels, allocValues);
+  renderTransactionHistory();
 }
 
-function setHoldingsSummary(invested, current) {
+// One click to run a Monte Carlo projection using this position's actual
+// quantity × avg. price as the investment amount, instead of retyping it in
+// Single Asset mode.
+function simulateHolding(ticker, quantity, avgPrice) {
+  clearError();
+  setAppMode('single');
+  tickerInput.value = ticker;
+  const investmentEl = document.getElementById('investment');
+  if (investmentEl) investmentEl.value = Math.round(quantity * avgPrice);
+  runMatrix();
+}
+
+// Deleting a "position" from the table removes every underlying buy/sell
+// transaction for that ticker (confirmed first, since it's destructive).
+async function deleteHoldingPosition(ticker) {
+  if (!currentUid) return;
+  const txs = (window.__transactionsCache || []).filter(t => t.ticker === ticker);
+  if (!txs.length) return;
+  if (!confirm(`Remove all ${txs.length} trade(s) for ${ticker}? This can't be undone.`)) return;
+  try {
+    await Promise.all(txs.map(t => window.__transactions.remove(currentUid, t.id)));
+    await refreshHoldingsList();
+  } catch (err) {
+    showError('Could not remove trades: ' + err.message);
+  }
+}
+
+function viewHoldingTrades(ticker) {
+  document.getElementById('transactions-table-body').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function renderTransactionHistory() {
+  const body = document.getElementById('transactions-table-body');
+  const txs = [...(window.__transactionsCache || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!txs.length) {
+    body.innerHTML = `<tr><td class="text-center text-ink-600 italic p-4">No trades recorded yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = txs.map(t => {
+    const typeClass = t.type === 'sell' ? 'text-loss' : 'text-gain';
+    return `
+      <tr class="border-b border-ink-600/30 hover:bg-ink-800/30">
+        <td class="px-3 py-1.5 text-ink-600 whitespace-nowrap">${escapeHtml(t.date || '')}</td>
+        <td class="px-3 py-1.5 ${typeClass} uppercase font-bold w-14">${escapeHtml(t.type)}</td>
+        <td class="px-3 py-1.5 text-white">${escapeHtml(t.ticker)}</td>
+        <td class="px-3 py-1.5 text-right">${fmt2.format(t.quantity)}</td>
+        <td class="px-3 py-1.5 text-right">${fmt2.format(t.price)}</td>
+        <td class="px-3 py-1.5 text-right">
+          <button class="text-ink-600 hover:text-loss transition-colors" onclick="deleteHolding('${escapeHtml(t.id)}')" aria-label="Remove trade">✕</button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function setHoldingsSummary(invested, current, realized) {
   const gain = current - invested;
   const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
   document.getElementById('hold-invested').textContent = '₹' + fmt2.format(invested);
@@ -2275,6 +2608,10 @@ function setHoldingsSummary(invested, current) {
   gainPctEl.textContent = (gainPct >= 0 ? '+' : '') + gainPct.toFixed(1) + '%';
   gainEl.className = `text-xl font-bold font-mono mt-1 ${gain >= 0 ? 'text-gain' : 'text-loss'}`;
   gainPctEl.className = `text-xl font-bold font-mono mt-1 ${gainPct >= 0 ? 'text-gain' : 'text-loss'}`;
+
+  const realizedEl = document.getElementById('hold-realized');
+  realizedEl.textContent = (realized >= 0 ? '+' : '') + '₹' + fmt2.format(realized);
+  realizedEl.className = `text-xl font-bold font-mono mt-1 ${realized >= 0 ? 'text-gain' : 'text-loss'}`;
 }
 
 function renderHoldingsAllocationChart(labels, values) {
@@ -2295,6 +2632,71 @@ function renderHoldingsAllocationChart(labels, values) {
     legend: { font: { color: isLight ? '#1a2233' : '#e7ebf2', size: 10 } },
     margin: { l: 10, r: 10, t: 10, b: 10 }
   }, { responsive: true, displayModeBar: false });
+}
+
+// ---------- CSV Import (bulk trade entry from a broker statement) ----------
+function toggleCsvImport() {
+  document.getElementById('csv-import-panel').classList.toggle('hidden');
+}
+
+// Accepts loose "ticker,type,quantity,price,date" rows — type and date are
+// optional (defaults: buy / today) so a plain broker export of
+// "SYMBOL,QTY,PRICE" per line also works, not just our own export format.
+function parseHoldingsCsv(text) {
+  const rows = [];
+  const errors = [];
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  lines.forEach((line, idx) => {
+    if (/^ticker\s*,/i.test(line)) return; // skip a header row if present
+    const parts = line.split(',').map(p => p.trim());
+    if (parts.length < 3) { errors.push(`Line ${idx + 1}: need at least ticker, quantity, price.`); return; }
+
+    let ticker = parts[0].toUpperCase();
+    let rest = parts.slice(1);
+    let type = 'buy';
+    if (/^(buy|sell)$/i.test(rest[0])) {
+      type = rest[0].toLowerCase();
+      rest = rest.slice(1);
+    }
+    const qty = parseFloat(rest[0]);
+    const price = parseFloat(rest[1]);
+    const date = rest[2] && !Number.isNaN(Date.parse(rest[2])) ? rest[2] : todayIso();
+
+    if (!TICKER_PATTERN.test(ticker)) { errors.push(`Line ${idx + 1}: "${parts[0]}" isn't a valid ticker.`); return; }
+    if (!(qty > 0)) { errors.push(`Line ${idx + 1}: invalid quantity.`); return; }
+    if (!(price > 0)) { errors.push(`Line ${idx + 1}: invalid price.`); return; }
+
+    rows.push({ ticker, type, quantity: qty, price, date, name: ticker });
+  });
+  return { rows, errors };
+}
+
+async function importHoldingsCsv() {
+  if (!currentUid) { showError('Sign in to import trades.'); return; }
+  const text = document.getElementById('csv-import-text').value;
+  if (!text.trim()) { showError('Paste some CSV rows to import first.'); return; }
+
+  const { rows, errors } = parseHoldingsCsv(text);
+  if (!rows.length) {
+    showError(errors.length ? `No valid rows found. ${errors[0]}` : 'No valid rows found.');
+    return;
+  }
+
+  const btn = document.getElementById('csv-import-btn');
+  btn.disabled = true;
+  try {
+    clearError();
+    await window.__transactions.saveMany(currentUid, rows);
+    document.getElementById('csv-import-text').value = '';
+    document.getElementById('csv-import-panel').classList.add('hidden');
+    await refreshHoldingsList();
+    refreshHoldingsPrices();
+    if (errors.length) showError(`Imported ${rows.length} trade(s), skipped ${errors.length} invalid line(s): ${errors[0]}`);
+  } catch (err) {
+    showError('CSV import failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // setAppMode('single') now runs from the authchange handler above, once a
