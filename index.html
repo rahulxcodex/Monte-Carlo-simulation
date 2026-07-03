@@ -1,4 +1,3 @@
-
 <!DOCTYPE html><html lang="en" class="dark"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PRO-SIM · Monte Carlo & Portfolio Terminal</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -273,6 +272,7 @@
         <button onclick="setAppMode('holdings')" id="btn-mode-holdings" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏠 Home</button>
         <button onclick="setAppMode('single')" id="btn-mode-single" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single Asset</button>
         <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
+        <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏆 Top</button>
       </div>
     </div>
 
@@ -310,6 +310,32 @@
         </div>
         <p class="text-[10px] text-ink-600 leading-relaxed font-mono">
           Markowitz Optimization calculates the covariance between all selected assets to plot the Efficient Frontier. Requires at least 2 tickers.
+        </p>
+      </div>
+
+      <!-- TOP PERFORMERS SECTION (Hidden by default) -->
+      <div id="sidebar-leaderboard" class="hidden flex-col gap-4">
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Period</label>
+          <select id="leaderboard-period" onchange="fetchLeaderboard()"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="1y">1 Year</option>
+            <option value="2y">2 Years</option>
+            <option value="3y">3 Years</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Show</label>
+          <select id="leaderboard-limit" onchange="fetchLeaderboard()"
+            class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="5">Top 5</option>
+            <option value="10" selected>Top 10</option>
+            <option value="20">Top 20</option>
+            <option value="50">Top 50</option>
+          </select>
+        </div>
+        <p class="text-[10px] text-ink-600 leading-relaxed font-mono">
+          Ranked by % price return over the selected period across NSE-listed equities. Recomputed server-side roughly once a day.
         </p>
       </div>
 
@@ -789,6 +815,30 @@
       </div>
     </div>
 
+    <div id="view-leaderboard" class="hidden flex-col h-full">
+      <div class="glass rounded-lg flex-1 flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-ink-600 bg-ink-800/40">
+          <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Top Performers</p>
+          <span id="leaderboard-updated" class="text-[10px] font-mono text-ink-600"></span>
+        </div>
+        <div class="overflow-x-auto flex-1">
+          <table class="w-full text-xs font-mono">
+            <thead>
+              <tr class="text-ink-600 uppercase text-[10px] tracking-wider text-left border-b border-ink-600">
+                <th class="px-4 py-2 font-normal">Rank</th>
+                <th class="px-4 py-2 font-normal">Asset</th>
+                <th class="px-4 py-2 font-normal text-right">Return</th>
+                <th class="px-4 py-2 font-normal"></th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-table-body">
+              <tr><td colspan="4" class="text-center text-ink-600 italic p-6">Loading leaderboard…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Global Empty / Loading States -->
     <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-ink-600 gap-2 z-10 pointer-events-none mt-16">
       <svg class="w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
@@ -1036,23 +1086,29 @@ function setAppMode(mode) {
   const isSingle = mode === 'single';
   const isPortfolio = mode === 'portfolio';
   const isHoldings = mode === 'holdings';
+  const isLeaderboard = mode === 'leaderboard';
 
   // UI Tabs
   document.getElementById('btn-mode-single').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isSingle ? 'mode-active' : 'mode-inactive'}`;
   document.getElementById('btn-mode-portfolio').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isPortfolio ? 'mode-active' : 'mode-inactive'}`;
   document.getElementById('btn-mode-holdings').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isHoldings ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-mode-leaderboard').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isLeaderboard ? 'mode-active' : 'mode-inactive'}`;
 
   // Sidebars — the simulator controls (search, params, run) don't apply to
-  // the Home/Holdings page, which has its own add-holding form in the main panel.
-  document.getElementById('sidebar-sim-controls').classList.toggle('hidden', isHoldings);
+  // the Home/Holdings page or the Top Performers page, which have their own
+  // controls in the main panel / a dedicated sidebar section instead.
+  document.getElementById('sidebar-sim-controls').classList.toggle('hidden', isHoldings || isLeaderboard);
   document.getElementById('sidebar-single-info').classList.toggle('hidden', !isSingle);
   document.getElementById('sidebar-single-advanced').classList.toggle('hidden', !isSingle);
   document.getElementById('sidebar-portfolio').classList.toggle('hidden', !isPortfolio);
+  document.getElementById('sidebar-leaderboard').classList.toggle('hidden', !isLeaderboard);
+  document.getElementById('sidebar-leaderboard').classList.toggle('flex', isLeaderboard);
 
   // Main Views
   document.getElementById('view-single').classList.toggle('hidden', !isSingle);
   document.getElementById('view-portfolio').classList.toggle('hidden', !isPortfolio);
   document.getElementById('view-holdings').classList.toggle('hidden', !isHoldings);
+  document.getElementById('view-leaderboard').classList.toggle('hidden', !isLeaderboard);
 
   // Labels & Inputs
   document.getElementById('ticker').value = '';
@@ -1062,19 +1118,23 @@ function setAppMode(mode) {
   if (isHoldings) {
     document.getElementById('main-title').textContent = 'My Holdings';
     document.getElementById('main-subtitle').textContent = 'Track the real assets you hold and how they\'re performing';
+  } else if (isLeaderboard) {
+    document.getElementById('main-title').textContent = 'Top Performers';
+    document.getElementById('main-subtitle').textContent = 'Highest returning NSE equities over the selected period';
   } else {
     document.getElementById('main-title').textContent = 'Monte Carlo Terminal';
     document.getElementById('main-subtitle').textContent = 'Select parameters and run the matrix to begin';
   }
 
   // Reset Empty State based on whether data exists for the current mode
-  // (the holdings page has its own empty state built into its table, so the
-  // global empty-state overlay never applies there).
-  const hasData = isHoldings ? true : (isSingle ? currentData != null : currentPortfolio != null);
+  // (the holdings & leaderboard pages have their own empty states built into
+  // their tables, so the global empty-state overlay never applies there).
+  const hasData = (isHoldings || isLeaderboard) ? true : (isSingle ? currentData != null : currentPortfolio != null);
   document.getElementById('empty-state').classList.toggle('hidden', hasData);
   document.getElementById('empty-msg').textContent = isSingle ? "No simulation yet — select parameters and run matrix." : "Add at least 2 tickers to build an Efficient Frontier.";
 
   if (isHoldings) refreshHoldingsList();
+  if (isLeaderboard) fetchLeaderboard();
 
   hideSuggestions();
 }
@@ -2541,6 +2601,62 @@ function renderHoldings() {
   setHoldingsSummary(totalInvestedInr, totalCurrentInr, totalRealizedInr);
   renderHoldingsAllocationChart(allocLabels, allocValues);
   renderTransactionHistory();
+}
+
+// ---------- Top Performers Leaderboard ----------
+async function fetchLeaderboard() {
+  const period = document.getElementById('leaderboard-period').value;
+  const limit = document.getElementById('leaderboard-limit').value;
+  const body = document.getElementById('leaderboard-table-body');
+  const updatedEl = document.getElementById('leaderboard-updated');
+
+  body.innerHTML = `<tr><td colspan="4" class="text-center text-ink-600 italic p-6">Loading leaderboard…</td></tr>`;
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/leaderboard?period=${period}&limit=${limit}`);
+    if (!res.ok) throw new Error((await res.json().catch(()=>({}))).detail || `Server error ${res.status}`);
+    const data = await res.json();
+    const rows = data.results || [];
+
+    if (data.last_built) {
+      updatedEl.textContent = `Updated ${new Date(data.last_built * 1000).toLocaleString()}`;
+    } else {
+      updatedEl.textContent = '';
+    }
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="4" class="text-center text-ink-600 italic p-6">No leaderboard data cached yet — try again shortly.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = rows.map(r => {
+      const gainClass = r.return_pct >= 0 ? 'text-gain' : 'text-loss';
+      return `
+      <tr class="border-b border-ink-600/50 hover:bg-ink-800/30">
+        <td class="px-4 py-2.5 text-ink-600">${r.rank}</td>
+        <td class="px-4 py-2.5">
+          <p class="text-white">${escapeHtml(r.name)}</p>
+          <p class="text-ink-600 text-[10px]">${escapeHtml(r.ticker)}</p>
+        </td>
+        <td class="px-4 py-2.5 text-right ${gainClass}">${r.return_pct >= 0 ? '+' : ''}${r.return_pct.toFixed(1)}%</td>
+        <td class="px-4 py-2.5 text-right whitespace-nowrap">
+          <button class="text-cyan-400 hover:text-cyan-300 transition-colors text-[10px] font-mono uppercase tracking-wider" onclick="simulateLeaderboardRow('${escapeHtml(r.ticker)}')" title="Run a Monte Carlo simulation for this ticker">Simulate</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="4" class="text-center text-loss italic p-6">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+// Same jump-to-Single-Asset-and-run pattern as simulateHolding(), just
+// without a pre-filled investment amount since a leaderboard row isn't tied
+// to a position size.
+function simulateLeaderboardRow(ticker) {
+  clearError();
+  setAppMode('single');
+  tickerInput.value = ticker;
+  runMatrix();
 }
 
 // One click to run a Monte Carlo projection using this position's actual
