@@ -1303,8 +1303,10 @@ async function fetchLiveMarketData() {
     
     document.getElementById('co-name').textContent = `${data.company} (${data.ticker})`;
     document.getElementById('co-meta').textContent = `${data.sector} · ${data.industry}`;
-    document.getElementById('co-pe').textContent = data.pe_ratio !== "N/A" ? parseFloat(data.pe_ratio).toFixed(2) : "N/A";
-    document.getElementById('co-ev').textContent = data.ev_ebitda !== "N/A" ? parseFloat(data.ev_ebitda).toFixed(2) : "N/A";
+    const peNum = parseFloat(data.pe_ratio);
+    const evNum = parseFloat(data.ev_ebitda);
+    document.getElementById('co-pe').textContent = Number.isFinite(peNum) ? peNum.toFixed(2) : "N/A";
+    document.getElementById('co-ev').textContent = Number.isFinite(evNum) ? evNum.toFixed(2) : "N/A";
     document.getElementById('company-card').classList.remove('hidden');
 
     document.getElementById('mu').value = (data.expected_return * 100).toFixed(1);
