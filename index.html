@@ -38,15 +38,10 @@
     getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, orderBy, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyD-JkCCKiEWBAjb8B1vACllKyJsMtzyqqE",
-    authDomain: "movie-blog-f46ea.firebaseapp.com",
-    projectId: "movie-blog-f46ea",
-    storageBucket: "movie-blog-f46ea.firebasestorage.app",
-    messagingSenderId: "348105946958",
-    appId: "1:348105946958:web:29cf44246612e5dcfe101f",
-    measurementId: "G-R4RG2SCXRK"
-  };
+  const FIREBASE_BACKEND_URL = 'https://rahulrgx-monte-carlo.hf.space';
+
+  const firebaseConfigRes = await fetch(`${FIREBASE_BACKEND_URL}/api/firebase-config`);
+  const firebaseConfig = await firebaseConfigRes.json();
 
   const fbApp = initializeApp(firebaseConfig);
   const auth = getAuth(fbApp);
@@ -60,7 +55,6 @@
     signOut: () => signOut(auth)
   };
 
-  // Per-user named simulation presets, stored at users/{uid}/scenarios/{autoId}.
   window.__scenarios = {
     save: async (uid, scenario) => {
       const ref = doc(collection(db, 'users', uid, 'scenarios'));
@@ -77,8 +71,6 @@
     }
   };
 
-  // Per-user watchlist entries (ticker + alert threshold on a chosen risk
-  // metric), stored at users/{uid}/watchlist/{autoId}.
   window.__watchlist = {
     save: async (uid, item) => {
       const ref = doc(collection(db, 'users', uid, 'watchlist'));
@@ -95,11 +87,6 @@
     }
   };
 
-  // Per-user portfolio transactions (ticker + buy/sell + quantity + price),
-  // stored at users/{uid}/transactions/{autoId}. "My Holdings" is derived by
-  // aggregating these into open-position lots (FIFO) instead of storing a
-  // single mutable position — this is what lets it show realized P&L on
-  // sells over time, not just the currently open quantity.
   window.__transactions = {
     save: async (uid, item) => {
       const ref = doc(collection(db, 'users', uid, 'transactions'));
@@ -176,10 +163,6 @@
   ::placeholder { color:#475064; }
   @media (prefers-reduced-motion: reduce) { .spinner { animation:none; } }
 
-  /* ---------- Light theme overrides ---------- */
-  /* The dark palette below is baked into literal Tailwind ink-* utility classes
-     rather than dark: variants, so the light theme is implemented as attribute
-     overrides scoped under body.light rather than a Tailwind dark-mode swap. */
   body.light { background:#f4f6fb; color:#1a2233; }
   body.light .glass { background:rgba(255,255,255,0.75); backdrop-filter:blur(14px); border:1px solid rgba(203,213,225,0.9); }
   body.light .glass-strong { background:rgba(255,255,255,0.92); backdrop-filter:blur(18px); border:1px solid rgba(203,213,225,0.9); }
@@ -216,6 +199,7 @@
 </head>
 <body class="h-screen flex flex-col lg:flex-row overflow-hidden antialiased">
 
+  <!-- AUTH OVERLAY -->
   <div id="auth-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 backdrop-blur-sm">
     <div class="glass-strong rounded-lg p-6 w-full max-w-sm mx-4">
       <h2 class="font-display text-lg font-bold text-white flex items-center gap-2 mb-1">
@@ -268,19 +252,18 @@
         <button onclick="doSignOut()" id="sign-out-btn" class="uppercase tracking-wider hover:text-cyan-400 transition-colors">Sign Out</button>
       </div>
       
-      <div class="flex rounded-md bg-ink-800 p-1 border border-ink-600">
-        <button onclick="setAppMode('holdings')" id="btn-mode-holdings" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏠 Home</button>
-        <button onclick="setAppMode('single')" id="btn-mode-single" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single Asset</button>
-        <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
-        <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏆 Top</button>
+      <div class="flex rounded-md bg-ink-800 p-1 border border-ink-600 overflow-x-auto whitespace-nowrap scrollbar-hide">
+        <button onclick="setAppMode('holdings')" id="btn-mode-holdings" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏠 Home</button>
+        <button onclick="setAppMode('single')" id="btn-mode-single" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single</button>
+        <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
+        <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏆 Top</button>
       </div>
     </div>
 
+    <!-- -->
     <div class="p-5 flex flex-col gap-6 relative">
 
-      <!-- Simulator-only controls (search box, params, run button) — hidden
-           on the Home/My Holdings page, which has its own add-holding form
-           in the main panel instead. -->
+      <!-- Simulator-only controls -->
       <div id="sidebar-sim-controls" class="flex flex-col gap-6">
 
       <!-- Universal Search Box -->
@@ -315,17 +298,40 @@
 
       <!-- SINGLE ASSET INFO SECTION -->
       <div id="sidebar-single-info" class="flex flex-col gap-6">
-        <div class="flex gap-2">
-          <button onclick="quickPickIndex('^NSEI')" class="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
-          <button onclick="quickPickIndex('^BSESN')" class="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Sensex 30</button>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="quickPickIndex('^NSEI')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
+          <button onclick="quickPickIndex('^CRSLDX')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 500</button>
+          <button onclick="quickPickIndex('^NSEBANK')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty Bank</button>
+          <button onclick="quickPickIndex('^CNXIT')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty IT</button>
         </div>
+
+        <!-- NIFTY 50 SECTOR BREAKDOWN -->
+        <div class="bg-ink-800/60 border border-ink-600 rounded-lg p-3">
+          <button onclick="toggleNifty50Breakdown()" id="nifty50-breakdown-toggle"
+            class="w-full flex items-center justify-between text-[11px] uppercase tracking-wider text-ink-600 font-mono hover:text-cyan-400 transition-colors">
+            <span>📊 Nifty 50 Sector Breakdown</span>
+            <span id="nifty50-breakdown-caret">▾</span>
+          </button>
+          <div id="nifty50-breakdown-body" class="hidden mt-3">
+            <div id="nifty50-breakdown-loading" class="text-xs text-ink-600 font-mono italic">Loading…</div>
+            <div id="nifty50-breakdown-chart" style="height:220px;"></div>
+            <ul id="nifty50-breakdown-list" class="mt-2 space-y-1 text-xs font-mono"></ul>
+          </div>
+        </div>
+
         <div id="company-card" class="hidden text-xs leading-relaxed bg-ink-800/60 border border-ink-600 rounded-lg p-3 font-mono">
           <p id="co-name" class="text-white text-sm font-display font-semibold mb-0.5"></p>
-          <p id="co-meta" class="text-ink-600"></p>
-        </div>
-        <div id="nifty-breakdown-card" class="hidden text-xs leading-relaxed bg-ink-800/60 border border-ink-600 rounded-lg p-3 font-mono">
-          <p class="text-ink-600 uppercase text-[10px] tracking-wider mb-2">Nifty 50 sector composition</p>
-          <div id="nifty-breakdown-list" class="space-y-1"></div>
+          <p id="co-meta" class="text-ink-600 mb-2"></p>
+          <div class="grid grid-cols-2 gap-2 border-t border-ink-600 pt-2">
+            <div>
+              <span class="text-ink-600 text-[10px] uppercase block">Trailing P/E</span>
+              <span id="co-pe" class="text-cyan-400 text-xs font-bold">—</span>
+            </div>
+            <div>
+              <span class="text-ink-600 text-[10px] uppercase block">EV / EBITDA</span>
+              <span id="co-ev" class="text-cyan-400 text-xs font-bold">—</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -339,7 +345,6 @@
             <input type="number" id="investment" value="100000" min="1" step="1000"
               class="w-full pl-7 pr-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
           </div>
-          <!-- FX Toggle -->
           <div id="fx-container" class="hidden mt-2 flex justify-between items-center bg-ink-800/40 p-2 rounded border border-ink-600/50">
             <span id="fx-rate-text" class="text-[10px] font-mono text-ink-600"></span>
             <label class="flex items-center gap-1.5 cursor-pointer">
@@ -359,6 +364,8 @@
             <option value="252" selected>1 Year</option>
             <option value="504">2 Years</option>
             <option value="756">3 Years</option>
+            <option value="1260">5 Years</option>
+            <option value="2520">10 Years</option>
           </select>
         </div>
         
@@ -376,7 +383,6 @@
           </select>
         </div>
 
-        <!-- Single Asset only: Model Selection & Override -->
         <div id="sidebar-single-advanced" class="space-y-4">
           <div>
             <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Simulation Model</label>
@@ -385,14 +391,6 @@
               <option value="bootstrap">Bootstrap · Historical returns</option>
               <option value="jump">Jump Diffusion · Merton</option>
             </select>
-            <button onclick="toggleFormula()" class="mt-2 text-[10.5px] font-mono text-cyan-400/80 hover:text-cyan-400 underline underline-offset-2">Show formula</button>
-            <pre id="model-formula" class="hidden mt-2 text-[10px] leading-relaxed font-mono text-ink-600 bg-ink-800/60 border border-ink-600 rounded p-2.5 whitespace-pre-wrap"></pre>
-          </div>
-          <div class="flex items-center justify-between pt-1">
-            <div>
-              <span class="text-[11px] uppercase tracking-wider text-ink-600 font-mono">Compare Both Models</span>
-            </div>
-            <div id="compare-toggle" class="toggle" onclick="toggleCompare()"><div class="toggle-dot"></div></div>
           </div>
           <hr class="border-ink-600">
           <div>
@@ -436,8 +434,23 @@
 
       </div><!-- /#sidebar-sim-controls -->
 
-      <!-- TOP PERFORMERS SECTION (Hidden by default) -->
+      <!-- TOP PERFORMERS SECTION -->
       <div id="sidebar-leaderboard" class="hidden flex-col gap-4">
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Index Filter</label>
+          <select id="leaderboard-index" onchange="fetchLeaderboard()" class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+            <option value="all">All NSE Equities</option>
+            <option value="nifty50">Nifty 50 Components</option>
+            <option value="niftybank">Nifty Bank</option>
+            <option value="niftyit">Nifty IT</option>
+            <option value="niftyauto">Nifty Auto</option>
+            <option value="niftyfmcg">Nifty FMCG</option>
+            <option value="niftymetal">Nifty Metal</option>
+            <option value="niftypharma">Nifty Pharma</option>
+            <option value="niftyenergy">Nifty Energy</option>
+            <option value="niftyrealty">Nifty Realty</option>
+          </select>
+        </div>
         <div>
           <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Period</label>
           <select id="leaderboard-period" onchange="fetchLeaderboard()"
@@ -527,8 +540,6 @@
           <li class="text-xs text-ink-600 font-mono italic p-1">No watchlist items yet.</li>
         </ul>
 
-        <!-- Email digest opt-in — server-side daily check, so alerts still
-             fire even when this tab isn't open. -->
         <div class="mt-2 pt-2 border-t border-ink-600/50">
           <label class="flex items-center gap-1.5 text-[10px] text-ink-600 font-mono cursor-pointer mb-1.5">
             <input type="checkbox" id="watchlist-digest-enabled" onchange="onDigestToggle()" class="accent-cyan-500">
@@ -578,7 +589,6 @@
         </div>
       </div>
 
-      <!-- Portfolio metrics -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
         <div class="glass p-4 rounded-lg">
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Portfolio</p>
@@ -620,6 +630,7 @@
       <div class="glass rounded-lg flex-1 min-h-[440px] flex flex-col relative">
         <div class="flex items-center border-b border-ink-600 bg-ink-800/40 rounded-t-lg px-2 overflow-x-auto">
           <button onclick="switchTab('paths')" id="tab-paths" class="px-4 py-3 text-xs font-mono tab-active focus:outline-none whitespace-nowrap">📈 Path Projection</button>
+          <button onclick="switchTab('history')" id="tab-history" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⏳ History Chart</button>
           <button onclick="switchTab('fan')" id="tab-fan" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📉 Confidence Fan</button>
           <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📊 Distribution</button>
           <button onclick="switchTab('dd')" id="tab-dd" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⚠️ Drawdown</button>
@@ -631,6 +642,17 @@
         </div>
         <div class="relative flex-1 w-full h-full p-2 min-h-[380px]">
           <div id="chart-paths" class="absolute inset-0 w-full h-full"></div>
+          
+          <div id="chart-history" class="absolute inset-0 w-full h-full flex flex-col opacity-0 pointer-events-none">
+             <div class="flex justify-end gap-1 px-4 mt-2 z-10 absolute right-0 top-0">
+               <button onclick="fetchHistoricalChart('1mo')" class="px-2 py-1 bg-ink-800 border border-ink-600 rounded text-[10px] font-mono hover:text-cyan-400 transition">1M</button>
+               <button onclick="fetchHistoricalChart('1y')" class="px-2 py-1 bg-ink-800 border border-ink-600 rounded text-[10px] font-mono hover:text-cyan-400 transition">1Y</button>
+               <button onclick="fetchHistoricalChart('3y')" class="px-2 py-1 bg-ink-800 border border-ink-600 rounded text-[10px] font-mono hover:text-cyan-400 transition">3Y</button>
+               <button onclick="fetchHistoricalChart('5y')" class="px-2 py-1 bg-ink-800 border border-ink-600 rounded text-[10px] font-mono hover:text-cyan-400 transition">5Y</button>
+             </div>
+             <div id="chart-history-plot" class="flex-1 w-full h-full pt-6"></div>
+          </div>
+
           <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
           <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
           <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
@@ -666,19 +688,16 @@
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-[500px]">
-        <!-- Efficient Frontier -->
         <div class="glass rounded-lg flex flex-col p-2 h-full min-h-[300px]">
           <p class="text-xs text-ink-600 font-mono text-center pt-2">Efficient Frontier (10k Simulations)</p>
           <div id="chart-frontier" class="flex-1 w-full"></div>
         </div>
         
         <div class="flex flex-col gap-4 h-full">
-          <!-- Weights Chart -->
           <div class="glass rounded-lg flex flex-col p-2 h-1/2 min-h-[200px]">
              <p class="text-xs text-ink-600 font-mono text-center pt-2">Max Sharpe Asset Allocation</p>
              <div id="chart-weights" class="flex-1 w-full"></div>
           </div>
-          <!-- Monte Carlo Projection -->
           <div class="glass rounded-lg flex flex-col p-2 h-1/2 min-h-[200px]">
              <p class="text-xs text-ink-600 font-mono text-center pt-2">Max Sharpe MC Projection</p>
              <div id="chart-port-paths" class="flex-1 w-full"></div>
@@ -689,8 +708,6 @@
 
     <!-- ================= MY HOLDINGS (HOMEPAGE) VIEW ================= -->
     <div id="view-holdings" class="hidden flex-col h-full">
-
-      <!-- Add Transaction Form -->
       <div class="glass p-4 rounded-lg mb-4">
         <div class="flex items-center justify-between mb-2">
           <p class="text-[11px] uppercase tracking-wider text-ink-600 font-mono">Record a Trade</p>
@@ -722,7 +739,6 @@
         </div>
         <p class="text-[10px] text-ink-600 font-mono mt-2">Price is per unit, in the asset's own currency (e.g. USD for AAPL, INR for RELIANCE.NS). Date defaults to today if left blank.</p>
 
-        <!-- CSV import panel -->
         <div id="csv-import-panel" class="hidden mt-3 pt-3 border-t border-ink-600/50">
           <p class="text-[10px] text-ink-600 font-mono mb-1.5">
             Paste rows as <span class="text-cyan-400">ticker,type,quantity,price,date</span> (type &amp; date optional — defaults to buy / today). One trade per line.
@@ -738,7 +754,6 @@
         </div>
       </div>
 
-      <!-- Summary cards -->
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <div class="glass p-4 rounded-lg">
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Invested (Open)</p>
@@ -762,7 +777,6 @@
         </div>
       </div>
 
-      <!-- Holdings table -->
       <div class="glass rounded-lg flex-1 flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-4 py-3 border-b border-ink-600 bg-ink-800/40">
           <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Open Positions</p>
@@ -794,7 +808,6 @@
         </div>
       </div>
 
-      <!-- Transaction history -->
       <div class="glass rounded-lg flex flex-col overflow-hidden mt-4 max-h-56">
         <div class="flex items-center justify-between px-4 py-2 border-b border-ink-600 bg-ink-800/40 shrink-0">
           <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Trade History</p>
@@ -808,13 +821,13 @@
         </div>
       </div>
 
-      <!-- Allocation chart -->
       <div class="glass rounded-lg p-2 mt-4 h-64 min-h-[220px]">
         <p class="text-xs text-ink-600 font-mono text-center pt-2">Portfolio Allocation by Current Value</p>
         <div id="chart-holdings-alloc" class="w-full" style="height:calc(100% - 24px);"></div>
       </div>
     </div>
 
+    <!-- ================= LEADERBOARD VIEW ================= -->
     <div id="view-leaderboard" class="hidden flex-col h-full">
       <div class="glass rounded-lg flex-1 flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-4 py-3 border-b border-ink-600 bg-ink-800/40">
@@ -839,7 +852,6 @@
       </div>
     </div>
 
-    <!-- Global Empty / Loading States -->
     <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-ink-600 gap-2 z-10 pointer-events-none mt-16">
       <svg class="w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
       <p class="text-xs font-mono" id="empty-msg">No simulation yet — select parameters and calculate matrix.</p>
@@ -860,13 +872,13 @@ const RISK_FREE_RATE = 0.05;
 const fmt2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
-// Application State
-let appMode = 'single'; // 'single' or 'portfolio'
+let appMode = 'single'; 
 let portfolioTickers = [];
 
 let currentData = null;      
 let currentCompare = null;   
 let currentPortfolio = null;
+let currentTicker = '';
 
 let baseCurrencyCode = 'INR';
 let currentCurrency = '₹';
@@ -879,7 +891,6 @@ let compareOn = false;
 let suggestIndex = -1;
 let searchDebounce = null;
 
-// ---------- auth ----------
 let authTab = 'signin';
 
 function setAuthTab(tab) {
@@ -929,8 +940,6 @@ async function signInGoogle() {
 
 async function doSignOut() {
   if (isGuest) {
-    // Guest mode has no Firebase session to end — just send them back to
-    // the auth overlay so they can sign in (or re-enter guest mode).
     isGuest = false;
     currentUid = null;
     document.getElementById('auth-overlay').classList.remove('hidden');
@@ -943,10 +952,6 @@ async function doSignOut() {
   try { await window.__auth.signOut(); } catch (err) { console.error(err); }
 }
 
-// Lets someone explore the dashboard and run simulations without creating
-// an account. Guest mode never touches Firestore (currentUid stays null),
-// so Save Scenario / watchlist alerts continue to prompt for sign-in —
-// only read-only-from-the-user's-perspective simulation features work.
 function continueAsGuest() {
   isGuest = true;
   currentUid = null;
@@ -977,11 +982,6 @@ function friendlyAuthError(err) {
   return map[code] || 'Something went wrong. Please try again.';
 }
 
-// Firebase (loaded as a module above) dispatches this whenever auth state
-// resolves or changes — on load (session restore), sign-in, sign-up, or
-// sign-out. This gates the app: the overlay stays up until Firebase confirms
-// a signed-in user, and the app only initializes once, the first time a user
-// is seen.
 let appBooted = false;
 let isGuest = false;
 window.addEventListener('authchange', (e) => {
@@ -1000,13 +1000,9 @@ window.addEventListener('authchange', (e) => {
     if (!appBooted) {
       appBooted = true;
       setAppMode('single');
-      // If the URL carries shared simulation params, apply them and run
-      // automatically instead of leaving the dashboard on its blank state.
       if (applySharedParamsFromURL()) runMatrix();
     }
   } else {
-    // Don't yank an active guest session back to the overlay — this branch
-    // only re-shows it for a real (non-guest) signed-out state.
     if (isGuest) return;
     overlay.classList.remove('hidden');
     document.getElementById('auth-email').value = '';
@@ -1018,9 +1014,6 @@ window.addEventListener('authchange', (e) => {
   }
 });
 
-// ---------- helpers ----------
-// Escapes text before it's ever interpolated into innerHTML, preventing broken
-// markup or injected scripts from tickers/company names returned by the search API.
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str == null ? '' : String(str);
@@ -1080,7 +1073,6 @@ function setLoading(on, text) {
   document.getElementById('fetch-btn').disabled = on;
 }
 
-// ---------- View Mode Management ----------
 function setAppMode(mode) {
   appMode = mode;
   const isSingle = mode === 'single';
@@ -1088,15 +1080,11 @@ function setAppMode(mode) {
   const isHoldings = mode === 'holdings';
   const isLeaderboard = mode === 'leaderboard';
 
-  // UI Tabs
-  document.getElementById('btn-mode-single').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isSingle ? 'mode-active' : 'mode-inactive'}`;
-  document.getElementById('btn-mode-portfolio').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isPortfolio ? 'mode-active' : 'mode-inactive'}`;
-  document.getElementById('btn-mode-holdings').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isHoldings ? 'mode-active' : 'mode-inactive'}`;
-  document.getElementById('btn-mode-leaderboard').className = `flex-1 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isLeaderboard ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-mode-single').className = `px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isSingle ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-mode-portfolio').className = `px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isPortfolio ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-mode-holdings').className = `px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isHoldings ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-mode-leaderboard').className = `px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded ${isLeaderboard ? 'mode-active' : 'mode-inactive'}`;
 
-  // Sidebars — the simulator controls (search, params, run) don't apply to
-  // the Home/Holdings page or the Top Performers page, which have their own
-  // controls in the main panel / a dedicated sidebar section instead.
   document.getElementById('sidebar-sim-controls').classList.toggle('hidden', isHoldings || isLeaderboard);
   document.getElementById('sidebar-single-info').classList.toggle('hidden', !isSingle);
   document.getElementById('sidebar-single-advanced').classList.toggle('hidden', !isSingle);
@@ -1104,13 +1092,11 @@ function setAppMode(mode) {
   document.getElementById('sidebar-leaderboard').classList.toggle('hidden', !isLeaderboard);
   document.getElementById('sidebar-leaderboard').classList.toggle('flex', isLeaderboard);
 
-  // Main Views
   document.getElementById('view-single').classList.toggle('hidden', !isSingle);
   document.getElementById('view-portfolio').classList.toggle('hidden', !isPortfolio);
   document.getElementById('view-holdings').classList.toggle('hidden', !isHoldings);
   document.getElementById('view-leaderboard').classList.toggle('hidden', !isLeaderboard);
 
-  // Labels & Inputs
   document.getElementById('ticker').value = '';
   document.getElementById('search-label').textContent = isSingle ? 'Ticker / Company' : 'Add Ticker to Portfolio';
   document.getElementById('run-btn-label').textContent = isSingle ? 'Calculate Matrix' : 'Optimize Portfolio';
@@ -1126,9 +1112,6 @@ function setAppMode(mode) {
     document.getElementById('main-subtitle').textContent = 'Select parameters and run the matrix to begin';
   }
 
-  // Reset Empty State based on whether data exists for the current mode
-  // (the holdings & leaderboard pages have their own empty states built into
-  // their tables, so the global empty-state overlay never applies there).
   const hasData = (isHoldings || isLeaderboard) ? true : (isSingle ? currentData != null : currentPortfolio != null);
   document.getElementById('empty-state').classList.toggle('hidden', hasData);
   document.getElementById('empty-msg').textContent = isSingle ? "No simulation yet — select parameters and run matrix." : "Add at least 2 tickers to build an Efficient Frontier.";
@@ -1139,12 +1122,6 @@ function setAppMode(mode) {
   hideSuggestions();
 }
 
-// ---------- Search & Autocomplete ----------
-// Generic ticker-suggestion widget: wires an <input> to a suggestion <div>,
-// hitting /api/search as the person types and resolving arrow keys / Enter /
-// click to a real ticker symbol via onSelect. Used by the main search box,
-// the Watchlist ticker field, and the My Holdings "Add a Holding" field, so
-// all three get the same debounced autocomplete + keyboard navigation.
 function createTickerSuggest(inputEl, boxEl, onSelect) {
   const state = { debounce: null, index: -1 };
 
@@ -1200,7 +1177,10 @@ function createTickerSuggest(inputEl, boxEl, onSelect) {
 const tickerInput = document.getElementById('ticker');
 const suggestBox = document.getElementById('suggest-box');
 const mainSuggest = createTickerSuggest(tickerInput, suggestBox, (ticker) => {
-  if (appMode === 'single') fetchLiveMarketData();
+  if (appMode === 'single') {
+      tickerInput.value = ticker;
+      runMatrix();
+  }
   else if (appMode === 'portfolio') addPortfolioTicker(ticker);
 });
 
@@ -1224,12 +1204,8 @@ document.addEventListener('click', (e) => {
   if (removeBtn) removePortfolioTicker(removeBtn.dataset.ticker);
 });
 
-function highlightSuggestion(rows) { rows.forEach((r, i) => r.classList.toggle('active', i === suggestIndex)); }
 function hideSuggestions() { mainSuggest.hide(); }
 
-// A valid symbol: letters/digits/dots/hyphens, optional leading caret for indices
-// (e.g. AAPL, TECHM.NS, ^NSEI). No spaces — that's the tell that a company name
-// like "Tech Mahindra" was typed but never resolved to a real ticker.
 const TICKER_PATTERN = /^\^?[A-Z0-9.\-]{1,15}$/;
 
 function executeSearchAction() {
@@ -1249,7 +1225,6 @@ function executeSearchAction() {
   }
 }
 
-// ---------- Portfolio Builder Logic ----------
 function addPortfolioTicker(ticker) {
   clearError();
   if (!TICKER_PATTERN.test(ticker)) {
@@ -1288,7 +1263,6 @@ function updatePortfolioUI() {
   `).join('');
 }
 
-// ---------- Matrix Execution Router ----------
 function runMatrix() {
   clearError();
   if (appMode === 'single') {
@@ -1303,7 +1277,6 @@ function runMatrix() {
   }
 }
 
-// ---------- Single Asset Simulation (API) ----------
 function buildStockURL(ticker, investment, horizon, simulations, model) {
   return `${BACKEND_URL}/api/stock/${encodeURIComponent(ticker)}?investment=${investment}&horizon=${horizon}&simulations=${simulations}&model=${model}`;
 }
@@ -1311,12 +1284,12 @@ function buildStockURL(ticker, investment, horizon, simulations, model) {
 async function fetchLiveMarketData() {
   const ticker = tickerInput.value.trim().toUpperCase();
   if (!ticker) { showError('Enter a ticker.'); return; }
+  currentTicker = ticker;
+  
   const inv = parseFloat(document.getElementById('investment').value) || 100000;
   const hor = parseInt(document.getElementById('horizon').value);
   const sims = parseInt(document.getElementById('simulations').value);
   const mod = document.getElementById('sim-model').value;
-
-  if (compareOn) return fetchCompareData(ticker, inv, hor, sims);
 
   setLoading(true, `Fetching ${ticker}…`);
   setStatus('SYNCING', true);
@@ -1330,6 +1303,8 @@ async function fetchLiveMarketData() {
     
     document.getElementById('co-name').textContent = `${data.company} (${data.ticker})`;
     document.getElementById('co-meta').textContent = `${data.sector} · ${data.industry}`;
+    document.getElementById('co-pe').textContent = data.pe_ratio !== "N/A" ? parseFloat(data.pe_ratio).toFixed(2) : "N/A";
+    document.getElementById('co-ev').textContent = data.ev_ebitda !== "N/A" ? parseFloat(data.ev_ebitda).toFixed(2) : "N/A";
     document.getElementById('company-card').classList.remove('hidden');
 
     document.getElementById('mu').value = (data.expected_return * 100).toFixed(1);
@@ -1342,20 +1317,45 @@ async function fetchLiveMarketData() {
     currentCompare = null;
     renderAllSingle();
     setStatus('LIVE', true);
-    maybeShowNiftyBreakdown(data.ticker);
     updateShareURL();
+    
+    fetchHistoricalChart("5y");
+    
   } catch (err) {
     showError(err.message);
     setStatus('ERROR', false);
   } finally { setLoading(false); }
 }
 
-async function fetchCompareData(ticker, inv, hor, sims) {
-  // Omitted complex compare implementation to save space for MVP Portfolio, 
-  // but logic remains similar. Let's just restore base single fetch for this version.
-  compareOn = false; 
-  document.getElementById('compare-toggle').classList.remove('on');
-  fetchLiveMarketData();
+async function fetchHistoricalChart(period="5y") {
+    if (!currentTicker) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/chart/${encodeURIComponent(currentTicker)}?period=${period}`);
+        if (!res.ok) throw new Error("Chart failed");
+        const data = await res.json();
+        
+        const trace = {
+          x: data.dates,
+          y: data.prices,
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: '#fbbf24', width: 1.5 },
+          fill: 'tozeroy',
+          fillcolor: 'rgba(251, 191, 36, 0.05)',
+          name: 'Historical Price'
+        };
+        
+        Plotly.newPlot('chart-history-plot', [trace], {
+          paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+          font: { family: 'JetBrains Mono', color: '#8a93a6', size: 10 },
+          margin: { l: 45, r: 15, t: 15, b: 35 },
+          xaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a' },
+          yaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', title: 'Price' }
+        }, { displayModeBar: false, responsive: true });
+        
+    } catch(e) {
+        console.error(e);
+    }
 }
 
 function updateFxUI(data) {
@@ -1381,7 +1381,6 @@ function toggleFx() {
   if (appMode === 'single' && currentData) renderAllSingle();
 }
 
-// ---------- Portfolio Optimization (API) ----------
 async function fetchPortfolioOptimization() {
   if (portfolioTickers.length < 2) { showError("Need at least 2 tickers to optimize portfolio."); return; }
   
@@ -1399,7 +1398,7 @@ async function fetchPortfolioOptimization() {
     if (!res.ok) throw new Error((await res.json().catch(()=>({}))).detail || `Server error ${res.status}`);
     const data = await res.json();
     
-    currentCurrency = '₹'; // Default to base currency representation for mixed portfolios
+    currentCurrency = '₹';
     showINR = false; 
     document.getElementById('fx-container').classList.add('hidden');
 
@@ -1415,7 +1414,6 @@ async function fetchPortfolioOptimization() {
   } finally { setLoading(false); }
 }
 
-// ---------- Normalization & UI Prep ----------
 function normalizeBackendData(data) {
   return {
     s0: data.current_price, mu: data.expected_return, sigma: data.volatility,
@@ -1439,7 +1437,6 @@ const plotlyLayoutBase = {
 };
 const plotlyConfig = { displayModeBar: false, responsive: true };
 
-// ---------- Render Single Asset Charts ----------
 function renderAllSingle() {
   const d = currentData;
   document.getElementById('empty-state').classList.add('hidden');
@@ -1460,12 +1457,10 @@ function renderAllSingle() {
 
   const mult = (showINR && fxRate !== 1.0) ? fxRate : 1.0;
 
-  // Paths
   const pTraces = d.paths.map(p => ({ y: p.map(v=>v*mult), type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.10)', width: 1 }, showlegend: false, hoverinfo: 'skip' }));
   pTraces.push({ y: d.paths[0].map((_,t) => (d.paths.reduce((a,p)=>a+p[t],0)/d.paths.length)*mult), type: 'scatter', mode: 'lines', name: 'Mean', line: { color: '#22d3ee', width: 2.5 } });
   Plotly.newPlot('chart-paths', pTraces, { ...plotlyLayoutBase, yaxis: { ...plotlyLayoutBase.yaxis, title: currentCurrency } }, plotlyConfig);
 
-  // Fan
   const fDays = d.fan.map(f=>f.day);
   const fTraces = [
     { x: fDays, y: d.fan.map(f=>f.p95*mult), type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
@@ -1476,14 +1471,10 @@ function renderAllSingle() {
   ];
   Plotly.newPlot('chart-fan', fTraces, { ...plotlyLayoutBase, yaxis: { ...plotlyLayoutBase.yaxis, title: currentCurrency } }, plotlyConfig);
 
-  // Histogram
   Plotly.newPlot('chart-hist', [{ x: d.histogram.bins.map(b=>b*mult), y: d.histogram.counts, type: 'bar', marker: { color: '#22d3ee', opacity: 0.6 } }], plotlyLayoutBase, plotlyConfig);
-
-  // Drawdown
   Plotly.newPlot('chart-dd', [{ x: d.drawdown.histogram.bins, y: d.drawdown.histogram.counts, type: 'bar', marker: { color: '#fbbf24', opacity: 0.6 } }], plotlyLayoutBase, plotlyConfig);
 }
 
-// ---------- Render Portfolio Charts ----------
 function renderPortfolio(data) {
   document.getElementById('empty-state').classList.add('hidden');
   
@@ -1492,7 +1483,6 @@ function renderPortfolio(data) {
   document.getElementById('port-sharpe').textContent = data.sharpe_ratio.toFixed(2);
   document.getElementById('port-profit').textContent = data.probability_profit.toFixed(1) + '%';
 
-  // 1. Efficient Frontier Scatter Plot
   const frontierTrace = {
     x: data.frontier.volatility.map(v => v * 100),
     y: data.frontier.return.map(r => r * 100),
@@ -1524,7 +1514,6 @@ function renderPortfolio(data) {
     showlegend: false
   }, plotlyConfig);
 
-  // 2. Weights Bar Chart (Max Sharpe)
   const tickers = Object.keys(data.max_sharpe_weights);
   const weights = Object.values(data.max_sharpe_weights).map(w => w * 100);
   
@@ -1541,7 +1530,6 @@ function renderPortfolio(data) {
     yaxis: { ...plotlyLayoutBase.yaxis, title: 'Weight %' }
   }, plotlyConfig);
 
-  // 3. MC Paths for Portfolio
   const pTraces = data.sample_paths.map(p => ({
     y: p, type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.15)', width: 1 }, hoverinfo: 'skip'
   }));
@@ -1556,27 +1544,77 @@ function renderPortfolio(data) {
   }, plotlyConfig);
 }
 
-// UI Tabs (Single Asset)
 function switchTab(tab) {
   activeTab = tab;
-  ['paths', 'fan', 'hist', 'dd'].forEach(t => {
-    document.getElementById(`tab-${t}`).className = `px-4 py-3 text-xs font-mono whitespace-nowrap focus:outline-none ${t === tab ? 'tab-active' : 'tab-inactive'}`;
-    document.getElementById(`chart-${t}`).classList.toggle('opacity-0', t !== tab);
-    document.getElementById(`chart-${t}`).classList.toggle('pointer-events-none', t !== tab);
+  ['paths', 'history', 'fan', 'hist', 'dd'].forEach(t => {
+    const elBtn = document.getElementById(`tab-${t}`);
+    if (elBtn) {
+        elBtn.className = `px-4 py-3 text-xs font-mono whitespace-nowrap focus:outline-none ${t === tab ? 'tab-active' : 'tab-inactive'}`;
+    }
+    const chartDiv = document.getElementById(`chart-${t}`);
+    if (chartDiv) {
+        chartDiv.classList.toggle('opacity-0', t !== tab);
+        chartDiv.classList.toggle('pointer-events-none', t !== tab);
+    }
   });
-  if (currentData) Plotly.Plots.resize(document.getElementById(`chart-${tab}`));
+  
+  const targetId = tab === 'history' ? 'chart-history-plot' : `chart-${tab}`;
+  const el = document.getElementById(targetId);
+  if (el && el.data) Plotly.Plots.resize(el);
 }
 
-// Client Side Fallback components (Formulas, overrides, misc setup)
-function toggleFormula() {
-  const pre = document.getElementById('model-formula');
-  pre.classList.toggle('hidden');
-}
 function quickPickIndex(ticker) { tickerInput.value = ticker; fetchLiveMarketData(); }
-function maybeShowNiftyBreakdown(ticker) { /* omitted breakdown code for space */ }
 
-// Was referenced by the mu/sigma range inputs' oninput handler but never defined,
-// which threw on every single-asset fetch (fetchLiveMarketData calls it unconditionally).
+let nifty50BreakdownLoaded = false;
+
+function toggleNifty50Breakdown() {
+  const body = document.getElementById('nifty50-breakdown-body');
+  const caret = document.getElementById('nifty50-breakdown-caret');
+  const willShow = body.classList.contains('hidden');
+  body.classList.toggle('hidden', !willShow);
+  caret.textContent = willShow ? '▴' : '▾';
+  if (willShow && !nifty50BreakdownLoaded) {
+    fetchNifty50Breakdown();
+  }
+}
+
+async function fetchNifty50Breakdown() {
+  const loadingEl = document.getElementById('nifty50-breakdown-loading');
+  const chartEl = document.getElementById('nifty50-breakdown-chart');
+  const listEl = document.getElementById('nifty50-breakdown-list');
+  loadingEl.classList.remove('hidden');
+  chartEl.innerHTML = '';
+  listEl.innerHTML = '';
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/index/nifty50-breakdown`);
+    if (!res.ok) throw new Error('breakdown unavailable');
+    const data = await res.json();
+    nifty50BreakdownLoaded = true;
+    loadingEl.classList.add('hidden');
+
+    const byIndustry = data.by_industry || [];
+    Plotly.newPlot(chartEl, [{
+      type: 'pie',
+      labels: byIndustry.map(x => x.industry),
+      values: byIndustry.map(x => x.count),
+      hole: 0.55,
+      textinfo: 'none',
+      marker: { colors: ['#22d3ee','#5eead4','#f5b942','#d85a30','#34d399','#f87171','#94a3b8','#a78bfa','#fb923c','#38bdf8'] }
+    }], {
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      margin: { t: 10, b: 10, l: 10, r: 10 },
+      showlegend: false,
+      font: { color: '#e7ebf2', size: 10 }
+    }, { displayModeBar: false, responsive: true });
+
+    listEl.innerHTML = `<li class="text-ink-600 flex justify-between border-b border-ink-600/50 pb-1 mb-1"><span>Total Constituents</span><span class="text-cyan-400">${data.count}</span></li>` +
+      byIndustry.map(x => `<li class="flex justify-between text-ink-600"><span>${x.industry}</span><span class="text-white">${x.count}</span></li>`).join('');
+  } catch (err) {
+    loadingEl.textContent = 'Sector breakdown unavailable — try again shortly.';
+  }
+}
+
 function onOverrideSlider() {
   document.getElementById('mu-val').textContent = parseFloat(document.getElementById('mu').value).toFixed(1) + '%';
   document.getElementById('sigma-val').textContent = parseFloat(document.getElementById('sigma').value).toFixed(1) + '%';
@@ -1589,11 +1627,6 @@ function toggleOverride() {
   document.getElementById('sigma').disabled = !overrideOn;
 }
 
-function toggleCompare() {
-  compareOn = !compareOn;
-  document.getElementById('compare-toggle').classList.toggle('on', compareOn);
-}
-
 function randomNormal() {
   let u = 0, v = 0;
   while (u === 0) u = Math.random();
@@ -1601,10 +1634,6 @@ function randomNormal() {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// Was referenced by runMatrix() when Manual Override is on, but never defined —
-// enabling the override and running the matrix threw immediately. Runs a GBM
-// simulation in the browser using the overridden mu/sigma against the last-known
-// price, producing the same data shape renderAllSingle() already expects.
 function runClientSimulation() {
   setLoading(true, 'Running client-side simulation…');
   setStatus('SIMULATING', true);
@@ -1614,7 +1643,7 @@ function runClientSimulation() {
     const sigma = parseFloat(document.getElementById('sigma').value) / 100;
     const hor = parseInt(document.getElementById('horizon').value);
     const investment = parseFloat(document.getElementById('investment').value) || 100000;
-    const sims = Math.min(parseInt(document.getElementById('simulations').value), 2000); // capped for browser perf
+    const sims = Math.min(parseInt(document.getElementById('simulations').value), 2000); 
     const dt = 1 / 252;
     const drift = (mu - 0.5 * sigma * sigma) * dt;
     const vol = sigma * Math.sqrt(dt);
@@ -1643,7 +1672,6 @@ function runClientSimulation() {
     const tailCount = Math.max(1, Math.floor(sortedValues.length * 0.05));
     const cvar95 = investment - (sortedValues.slice(0, tailCount).reduce((a, b) => a + b, 0) / tailCount);
 
-    // Fan chart across time (sampled to keep the payload small)
     const fan = [];
     const step = Math.max(1, Math.floor(hor / 60));
     for (let t = 0; t <= hor; t += step) {
@@ -1688,12 +1716,10 @@ function runClientSimulation() {
   }
 }
 
-// ---------- Theme toggle (dark / light) ----------
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   document.documentElement.classList.toggle('dark', !isLight);
   try { localStorage.setItem('prosim-theme', isLight ? 'light' : 'dark'); } catch (e) {}
-  // Nudge Plotly charts to re-flow now that surrounding panel colors changed.
   ['paths', 'fan', 'hist', 'dd'].forEach(t => {
     const el = document.getElementById(`chart-${t}`);
     if (el && el.data) Plotly.Plots.resize(el);
@@ -1712,10 +1738,6 @@ function toggleTheme() {
   }
 })();
 
-// ---------- Shareable links ----------
-// Encodes the current parameter set (mode, ticker(s), horizon, sims, model,
-// overrides) into the URL query string so a simulation setup can be copied,
-// bookmarked, or sent to someone else.
 function buildShareParams() {
   const p = new URLSearchParams();
   p.set('mode', appMode);
@@ -1753,8 +1775,6 @@ async function shareCurrentLink() {
   }
 }
 
-// Reads ?mode/ticker/tickers/horizon/simulations/model/override/mu/sigma from
-// the URL (if present) and applies them to the form, then triggers a run.
 function applySharedParamsFromURL() {
   const p = new URLSearchParams(location.search);
   if (![...p.keys()].length) return false;
@@ -1786,7 +1806,6 @@ function applySharedParamsFromURL() {
   return true;
 }
 
-// ---------- CSV / PNG / PDF export ----------
 function csvFromRows(headers, rows) {
   const esc = v => {
     const s = v == null ? '' : String(v);
@@ -1804,8 +1823,6 @@ function triggerDownload(filename, content, mime) {
   URL.revokeObjectURL(url);
 }
 
-// Exports the data behind the currently visible chart (single-asset tabs, or
-// the efficient frontier when in portfolio mode) as a CSV file.
 function downloadChartCSV() {
   try {
     if (appMode === 'single') {
@@ -1853,8 +1870,6 @@ function downloadChartPNG() {
   }
 }
 
-// Builds a one-page PDF summary of the metrics panel (VaR, CVaR, drawdown,
-// etc.) for the current run, using jsPDF loaded from cdnjs.
 function downloadMetricsPDF() {
   try {
     const { jsPDF } = window.jspdf;
@@ -1917,7 +1932,6 @@ function downloadMetricsPDF() {
   }
 }
 
-// ---------- Save / load scenarios (Firestore) ----------
 let currentUid = null;
 
 function collectScenarioPayload() {
@@ -1999,9 +2013,6 @@ function loadScenario(id) {
     document.getElementById('sim-model').value = s.model || 'gbm';
     tickerInput.value = s.ticker || '';
     overrideOn = false;
-    document.getElementById('override-toggle').classList.remove('on');
-    document.getElementById('mu').disabled = true;
-    document.getElementById('sigma').disabled = true;
     if (s.overrideOn) {
       toggleOverride();
       document.getElementById('mu').value = s.mu;
@@ -2022,7 +2033,6 @@ async function deleteScenario(id) {
   }
 }
 
-// ---------- Watchlist / Alerts (Firestore) ----------
 const WATCHLIST_METRIC_LABELS = {
   var95: 'VaR 95%', var99: 'VaR 99%', cvar95: 'CVaR 95%',
   price: 'Price', volatility: 'Volatility', probability_profit: 'Prob. Profit'
@@ -2154,9 +2164,6 @@ function loadWatchlistTicker(ticker) {
   runMatrix();
 }
 
-// Requests browser notification permission once, quietly (no-op if
-// unsupported or already decided) so alert badges can also fire a
-// native notification when a threshold is breached.
 function ensureNotificationPermission() {
   if (typeof Notification === 'undefined') return;
   if (Notification.permission === 'default') {
@@ -2178,9 +2185,6 @@ async function checkWatchlist() {
   const alerts = [];
   await Promise.all(items.map(async (it) => {
     try {
-      // The backend's /api/stock endpoint already resolves company names,
-      // popular aliases, and index aliases via resolve_symbol(), so the raw
-      // ticker text the user typed can be passed straight through.
       const url = `${BACKEND_URL}/api/stock/${encodeURIComponent(it.ticker)}?investment=100000&horizon=252&simulations=3000&model=gbm`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('bad response');
@@ -2209,10 +2213,6 @@ async function checkWatchlist() {
   }
 }
 
-// ---------- Email Digest Subscription (server-side daily check) ----------
-// Local prefs (enabled + email) are kept in localStorage per-uid since they're
-// just UI convenience state; the source of truth for *what* to check lives in
-// Firestore's watchlist, which we push to the backend on every change.
 function digestPrefsKey() { return currentUid ? `prosim-digest-${currentUid}` : null; }
 
 function loadDigestPrefs() {
@@ -2297,15 +2297,9 @@ async function sendTestDigestEmail() {
   }
 }
 
-// ---------- My Holdings (Homepage portfolio tracker) ----------
-// Data model: every Buy/Sell is a row in the `transactions` collection.
-// Positions are *derived* from these via FIFO lot matching, so selling part
-// or all of a position doesn't destroy history — realized P&L on the sold
-// portion accumulates, and any remaining quantity keeps its correct
-// remaining cost basis for unrealized P&L.
 window.__transactionsCache = [];
-window.__holdingsCache = [];      // derived open-position aggregates, kept for compatibility with existing renderers
-let holdingsQuoteCache = {};      // ticker -> quote response, refreshed on demand
+window.__holdingsCache = [];      
+let holdingsQuoteCache = {};      
 
 const holdingTypeInput = document.getElementById('holding-type');
 const holdingDateInput = document.getElementById('holding-date');
@@ -2364,10 +2358,6 @@ function openQuantityFor(ticker) {
   return Math.max(0, qty);
 }
 
-// Best-effort resolution for whatever the person left in the ticker box —
-// mirrors the "Enter picks the top suggestion" behavior of the other search
-// boxes, but falls back to their raw (uppercased) text if suggestions never
-// loaded, so a fast typer isn't blocked from adding a trade.
 function resolveTypedTicker(raw) {
   const rows = holdingSuggestBox.querySelectorAll('.suggest-row');
   if (rows.length) return rows[0].dataset.ticker;
@@ -2402,12 +2392,6 @@ async function refreshHoldingsList() {
   }
 }
 
-// FIFO lot matching: walks each ticker's trades oldest→newest, consuming buy
-// lots as sells occur. Produces, per ticker: remaining open quantity + its
-// weighted average cost (for unrealized P&L) and cumulative realized P&L
-// from all matched sells (for realized P&L) — this is what makes selling
-// partial or full positions show up correctly instead of only ever
-// reflecting the current open position.
 function aggregatePositions(transactions) {
   const byTicker = {};
   transactions.forEach(t => { (byTicker[t.ticker] = byTicker[t.ticker] || []).push(t); });
@@ -2415,7 +2399,7 @@ function aggregatePositions(transactions) {
   const positions = [];
   Object.keys(byTicker).forEach(ticker => {
     const txs = [...byTicker[ticker]].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const lots = []; // { qty, price }
+    const lots = []; 
     let realized = 0;
     let name = ticker;
 
@@ -2431,9 +2415,6 @@ function aggregatePositions(transactions) {
           remaining -= used;
           if (lot.qty <= 1e-9) lots.shift();
         }
-        // Selling more than recorded buys (e.g. imported partial history) —
-        // treat the excess as realized against a zero-cost-basis lot rather
-        // than silently dropping it, so the P&L total isn't understated.
         if (remaining > 1e-9) realized += t.price * remaining;
       } else {
         lots.push({ qty: t.quantity, price: t.price });
@@ -2512,8 +2493,6 @@ function renderHoldings() {
     const realizedCell = `<td class="px-4 py-2.5 text-right ${realizedClass}">${it.realized !== 0 ? (it.realized >= 0 ? '+' : '') + fmt2.format(it.realized) : '—'}</td>`;
 
     if (it.quantity <= 1e-9) {
-      // Fully closed position — still shown so realized P&L stays visible,
-      // but with no open-quantity row of its own to simulate/refresh price for.
       rows.push(`
         <tr class="border-b border-ink-600/50 hover:bg-ink-800/30 opacity-70">
           <td class="px-4 py-2.5">
@@ -2587,7 +2566,6 @@ function renderHoldings() {
 
   body.innerHTML = rows.join('');
 
-  // Fill in weight % now that we know the portfolio total
   items.forEach(it => {
     const q = holdingsQuoteCache[it.ticker];
     if (!q || it.quantity <= 1e-9) return;
@@ -2603,17 +2581,18 @@ function renderHoldings() {
   renderTransactionHistory();
 }
 
-// ---------- Top Performers Leaderboard ----------
 async function fetchLeaderboard() {
   const period = document.getElementById('leaderboard-period').value;
   const limit = document.getElementById('leaderboard-limit').value;
+  const indexEl = document.getElementById('leaderboard-index');
+  const index = indexEl ? indexEl.value : 'all';
   const body = document.getElementById('leaderboard-table-body');
   const updatedEl = document.getElementById('leaderboard-updated');
 
   body.innerHTML = `<tr><td colspan="4" class="text-center text-ink-600 italic p-6">Loading leaderboard…</td></tr>`;
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/leaderboard?period=${period}&limit=${limit}`);
+    const res = await fetch(`${BACKEND_URL}/api/leaderboard?period=${period}&limit=${limit}&index=${index}`);
     if (!res.ok) throw new Error((await res.json().catch(()=>({}))).detail || `Server error ${res.status}`);
     const data = await res.json();
     const rows = data.results || [];
@@ -2649,9 +2628,6 @@ async function fetchLeaderboard() {
   }
 }
 
-// Same jump-to-Single-Asset-and-run pattern as simulateHolding(), just
-// without a pre-filled investment amount since a leaderboard row isn't tied
-// to a position size.
 function simulateLeaderboardRow(ticker) {
   clearError();
   setAppMode('single');
@@ -2659,9 +2635,6 @@ function simulateLeaderboardRow(ticker) {
   runMatrix();
 }
 
-// One click to run a Monte Carlo projection using this position's actual
-// quantity × avg. price as the investment amount, instead of retyping it in
-// Single Asset mode.
 function simulateHolding(ticker, quantity, avgPrice) {
   clearError();
   setAppMode('single');
@@ -2671,8 +2644,6 @@ function simulateHolding(ticker, quantity, avgPrice) {
   runMatrix();
 }
 
-// Deleting a "position" from the table removes every underlying buy/sell
-// transaction for that ticker (confirmed first, since it's destructive).
 async function deleteHoldingPosition(ticker) {
   if (!currentUid) return;
   const txs = (window.__transactionsCache || []).filter(t => t.ticker === ticker);
@@ -2750,20 +2721,16 @@ function renderHoldingsAllocationChart(labels, values) {
   }, { responsive: true, displayModeBar: false });
 }
 
-// ---------- CSV Import (bulk trade entry from a broker statement) ----------
 function toggleCsvImport() {
   document.getElementById('csv-import-panel').classList.toggle('hidden');
 }
 
-// Accepts loose "ticker,type,quantity,price,date" rows — type and date are
-// optional (defaults: buy / today) so a plain broker export of
-// "SYMBOL,QTY,PRICE" per line also works, not just our own export format.
 function parseHoldingsCsv(text) {
   const rows = [];
   const errors = [];
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   lines.forEach((line, idx) => {
-    if (/^ticker\s*,/i.test(line)) return; // skip a header row if present
+    if (/^ticker\s*,/i.test(line)) return; 
     const parts = line.split(',').map(p => p.trim());
     if (parts.length < 3) { errors.push(`Line ${idx + 1}: need at least ticker, quantity, price.`); return; }
 
@@ -2814,10 +2781,6 @@ async function importHoldingsCsv() {
     btn.disabled = false;
   }
 }
-
-// setAppMode('single') now runs from the authchange handler above, once a
-// user is confirmed signed in, instead of unconditionally on page load — so
-// the dashboard doesn't initialize behind the auth overlay.
 </script>
 </body>
 </html>
