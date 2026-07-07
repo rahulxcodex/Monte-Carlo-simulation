@@ -453,7 +453,7 @@
         </div>
         <div>
           <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Period</label>
-          <select id="leaderboard-period" onchange="fetchLeaderboard()"
+          <select id="leaderboard-period" onchange="fetchLeaderboard(); scheduleSessionSave();"
             class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
             <option value="1y">1 Year</option>
             <option value="2y">2 Years</option>
@@ -893,6 +893,91 @@ let searchDebounce = null;
 
 let authTab = 'signin';
 
+// --- Session-only persistence (survives reload in this tab, not new tabs/restarts) ---
+const SESSION_STORAGE_KEY = 'prosim_session';
+let lastChartPeriod = '5y';
+let pendingRestoreChartPeriod = null;
+let restoredSessionState = null;
+let _sessionSaveTimer = null;
+
+function collectSessionState() {
+  return {
+    mode: appMode,
+    activeTab,
+    ticker: (typeof tickerInput !== 'undefined' && tickerInput) ? tickerInput.value.trim().toUpperCase() : '',
+    portfolioTickers: [...portfolioTickers],
+    chartPeriod: lastChartPeriod,
+    overrideOn,
+    mu: document.getElementById('mu') ? document.getElementById('mu').value : null,
+    sigma: document.getElementById('sigma') ? document.getElementById('sigma').value : null,
+    leaderboardPeriod: document.getElementById('leaderboard-period') ? document.getElementById('leaderboard-period').value : null,
+    csvImportOpen: !!(document.getElementById('csv-import-panel') && !document.getElementById('csv-import-panel').classList.contains('hidden'))
+  };
+}
+
+function saveSessionStateNow() {
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(collectSessionState()));
+  } catch (e) {
+    // sessionStorage unavailable (private mode, quota, etc) — fail silently
+  }
+}
+
+function scheduleSessionSave() {
+  clearTimeout(_sessionSaveTimer);
+  _sessionSaveTimer = setTimeout(saveSessionStateNow, 300);
+}
+
+function loadSessionState() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function applySessionState(s) {
+  if (!s) return;
+  const mode = ['single', 'portfolio', 'holdings', 'leaderboard'].includes(s.mode) ? s.mode : 'single';
+  setAppMode(mode);
+
+  if (Array.isArray(s.portfolioTickers)) {
+    portfolioTickers = [...s.portfolioTickers];
+    updatePortfolioUI();
+  }
+  if (s.ticker && typeof tickerInput !== 'undefined' && tickerInput) {
+    tickerInput.value = s.ticker;
+  }
+  if (s.leaderboardPeriod && document.getElementById('leaderboard-period')) {
+    document.getElementById('leaderboard-period').value = s.leaderboardPeriod;
+  }
+  overrideOn = false;
+  if (s.overrideOn) {
+    toggleOverride();
+    if (s.mu != null) document.getElementById('mu').value = s.mu;
+    if (s.sigma != null) document.getElementById('sigma').value = s.sigma;
+    onOverrideSlider();
+  }
+  if (s.csvImportOpen && document.getElementById('csv-import-panel')) {
+    document.getElementById('csv-import-panel').classList.remove('hidden');
+  }
+  if (s.chartPeriod) {
+    lastChartPeriod = s.chartPeriod;
+    pendingRestoreChartPeriod = s.chartPeriod;
+  }
+  if (s.activeTab && typeof switchTab === 'function') {
+    switchTab(s.activeTab);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  restoredSessionState = loadSessionState();
+});
+
 function setAuthTab(tab) {
   authTab = tab;
   document.getElementById('auth-tab-signin').className = `flex-1 py-1.5 rounded border ${tab === 'signin' ? 'mode-active' : 'mode-inactive'}`;
@@ -963,8 +1048,7 @@ function continueAsGuest() {
   refreshHoldingsList();
   if (!appBooted) {
     appBooted = true;
-    setAppMode('single');
-    if (applySharedParamsFromURL()) runMatrix();
+    bootAppState();
   }
 }
 
@@ -999,8 +1083,7 @@ window.addEventListener('authchange', (e) => {
     refreshHoldingsList();
     if (!appBooted) {
       appBooted = true;
-      setAppMode('single');
-      if (applySharedParamsFromURL()) runMatrix();
+      bootAppState();
     }
   } else {
     if (isGuest) return;
@@ -1120,6 +1203,7 @@ function setAppMode(mode) {
   if (isLeaderboard) fetchLeaderboard();
 
   hideSuggestions();
+  scheduleSessionSave();
 }
 
 function createTickerSuggest(inputEl, boxEl, onSelect) {
@@ -1175,6 +1259,7 @@ function createTickerSuggest(inputEl, boxEl, onSelect) {
 }
 
 const tickerInput = document.getElementById('ticker');
+tickerInput.addEventListener('input', scheduleSessionSave);
 const suggestBox = document.getElementById('suggest-box');
 const mainSuggest = createTickerSuggest(tickerInput, suggestBox, (ticker) => {
   if (appMode === 'single') {
@@ -1245,6 +1330,7 @@ function removePortfolioTicker(ticker) {
 }
 
 function updatePortfolioUI() {
+  scheduleSessionSave();
   const list = document.getElementById('portfolio-list');
   document.getElementById('port-count').textContent = `${portfolioTickers.length}/15`;
   
@@ -1321,7 +1407,8 @@ async function fetchLiveMarketData() {
     setStatus('LIVE', true);
     updateShareURL();
     
-    fetchHistoricalChart("5y");
+    fetchHistoricalChart(pendingRestoreChartPeriod || "5y");
+    pendingRestoreChartPeriod = null;
     
   } catch (err) {
     showError(err.message);
@@ -1330,6 +1417,8 @@ async function fetchLiveMarketData() {
 }
 
 async function fetchHistoricalChart(period="5y") {
+    lastChartPeriod = period;
+    scheduleSessionSave();
     if (!currentTicker) return;
     try {
         const res = await fetch(`${BACKEND_URL}/api/chart/${encodeURIComponent(currentTicker)}?period=${period}`);
@@ -1548,6 +1637,7 @@ function renderPortfolio(data) {
 
 function switchTab(tab) {
   activeTab = tab;
+  scheduleSessionSave();
   ['paths', 'history', 'fan', 'hist', 'dd'].forEach(t => {
     const elBtn = document.getElementById(`tab-${t}`);
     if (elBtn) {
@@ -1627,6 +1717,7 @@ function toggleOverride() {
   document.getElementById('override-toggle').classList.toggle('on', overrideOn);
   document.getElementById('mu').disabled = !overrideOn;
   document.getElementById('sigma').disabled = !overrideOn;
+  scheduleSessionSave();
 }
 
 function randomNormal() {
@@ -1775,6 +1866,23 @@ async function shareCurrentLink() {
   } catch (e) {
     showError('Copy this URL: ' + location.href);
   }
+}
+
+function bootAppState() {
+  if (applySharedParamsFromURL()) {
+    runMatrix();
+    return;
+  }
+  if (restoredSessionState) {
+    applySessionState(restoredSessionState);
+    if (restoredSessionState.mode === 'single' && tickerInput.value.trim()) {
+      runMatrix();
+    } else if (restoredSessionState.mode === 'portfolio' && portfolioTickers.length >= 2) {
+      runMatrix();
+    }
+    return;
+  }
+  setAppMode('single');
 }
 
 function applySharedParamsFromURL() {
@@ -2725,6 +2833,7 @@ function renderHoldingsAllocationChart(labels, values) {
 
 function toggleCsvImport() {
   document.getElementById('csv-import-panel').classList.toggle('hidden');
+  scheduleSessionSave();
 }
 
 function parseHoldingsCsv(text) {
