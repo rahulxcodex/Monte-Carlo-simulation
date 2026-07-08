@@ -332,17 +332,6 @@
               <span id="co-ev" class="text-cyan-400 text-xs font-bold">—</span>
             </div>
           </div>
-          <div id="sector-compare" class="hidden grid grid-cols-2 gap-2 border-t border-ink-600 pt-2 mt-2">
-            <div>
-              <span class="text-ink-600 text-[10px] uppercase block">Sector Median P/E</span>
-              <span id="sector-pe" class="text-amber-400 text-xs font-bold">—</span>
-            </div>
-            <div>
-              <span class="text-ink-600 text-[10px] uppercase block">Sector Median EV/EBITDA</span>
-              <span id="sector-ev" class="text-amber-400 text-xs font-bold">—</span>
-            </div>
-            <p id="sector-compare-note" class="col-span-2 text-ink-600 text-[10px] mt-1"></p>
-          </div>
         </div>
       </div>
 
@@ -843,7 +832,13 @@
       <div class="glass rounded-lg flex-1 flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-4 py-3 border-b border-ink-600 bg-ink-800/40">
           <p class="text-xs font-mono text-ink-600 uppercase tracking-wider">Top Performers</p>
-          <span id="leaderboard-updated" class="text-[10px] font-mono text-ink-600"></span>
+          <div class="flex items-center gap-3">
+            <span id="leaderboard-updated" class="text-[10px] font-mono text-ink-600"></span>
+            <button id="btn-leaderboard-recompute" onclick="forceRecomputeLeaderboard()"
+              class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-cyan-400 hover:text-cyan-300 hover:border-cyan-500 transition-colors">
+              Force Recompute
+            </button>
+          </div>
         </div>
         <div class="overflow-x-auto flex-1">
           <table class="w-full text-xs font-mono">
@@ -1378,31 +1373,6 @@ function buildStockURL(ticker, investment, horizon, simulations, model) {
   return `${BACKEND_URL}/api/stock/${encodeURIComponent(ticker)}?investment=${investment}&horizon=${horizon}&simulations=${simulations}&model=${model}`;
 }
 
-async function fetchSectorMetrics(sector) {
-  const wrap = document.getElementById('sector-compare');
-  if (!sector || sector === 'N/A') { wrap.classList.add('hidden'); return; }
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/sector-metrics?sector=${encodeURIComponent(sector)}`);
-    if (!res.ok) { wrap.classList.add('hidden'); return; }
-    const d = await res.json();
-
-    document.getElementById('sector-pe').textContent =
-      Number.isFinite(d.trailing_pe_median) ? d.trailing_pe_median.toFixed(2) : "N/A";
-    document.getElementById('sector-ev').textContent =
-      Number.isFinite(d.ev_ebitda_median) ? d.ev_ebitda_median.toFixed(2) : "N/A";
-
-    const noteEl = document.getElementById('sector-compare-note');
-    const parts = [`${d.constituent_count} stocks in sector`];
-    if (d.constituent_count < 5) parts.push('low confidence — thin sample');
-    if (d.stale) parts.push('data may be stale');
-    noteEl.textContent = parts.join(' · ');
-
-    wrap.classList.remove('hidden');
-  } catch (e) {
-    wrap.classList.add('hidden');
-  }
-}
-
 async function fetchLiveMarketData() {
   const ticker = tickerInput.value.trim().toUpperCase();
   if (!ticker) { showError('Enter a ticker.'); return; }
@@ -1425,7 +1395,6 @@ async function fetchLiveMarketData() {
     
     document.getElementById('co-name').textContent = `${data.company} (${data.ticker})`;
     document.getElementById('co-meta').textContent = `${data.sector} · ${data.industry}`;
-    fetchSectorMetrics(data.sector);
     const peNum = parseFloat(data.pe_ratio);
     const evNum = parseFloat(data.ev_ebitda);
     document.getElementById('co-pe').textContent = Number.isFinite(peNum) ? peNum.toFixed(2) : "N/A";
@@ -2772,6 +2741,48 @@ async function fetchLeaderboard() {
     }).join('');
   } catch (err) {
     body.innerHTML = `<tr><td colspan="4" class="text-center text-loss italic p-6">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function forceRecomputeLeaderboard() {
+  const btn = document.getElementById('btn-leaderboard-recompute');
+  const updatedEl = document.getElementById('leaderboard-updated');
+  btn.disabled = true;
+  btn.textContent = 'Recomputing…';
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/leaderboard/recompute`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `Server error ${res.status}`);
+
+    if (data.status === 'already_running') {
+      updatedEl.textContent = 'A recompute is already in progress…';
+    }
+
+    // Poll the leaderboard every 5s until last_built moves forward, or give up after ~3 min.
+    const startedBuiltTime = (await (await fetch(`${BACKEND_URL}/api/leaderboard?period=1y&limit=5`)).json()).last_built;
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const check = await (await fetch(`${BACKEND_URL}/api/leaderboard?period=1y&limit=5`)).json();
+        if (check.last_built && check.last_built > startedBuiltTime) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = 'Force Recompute';
+          fetchLeaderboard();
+        } else if (attempts >= 36) { // ~3 minutes
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = 'Force Recompute';
+          updatedEl.textContent = 'Recompute is taking longer than expected — check back shortly.';
+        }
+      } catch (e) { /* keep polling */ }
+    }, 5000);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Force Recompute';
+    updatedEl.textContent = `Recompute failed: ${err.message}`;
   }
 }
 
