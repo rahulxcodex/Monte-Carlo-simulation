@@ -332,6 +332,17 @@
               <span id="co-ev" class="text-cyan-400 text-xs font-bold">—</span>
             </div>
           </div>
+          <div id="sector-compare" class="hidden grid grid-cols-2 gap-2 border-t border-ink-600 pt-2 mt-2">
+            <div>
+              <span class="text-ink-600 text-[10px] uppercase block">Sector Median P/E</span>
+              <span id="sector-pe" class="text-amber-400 text-xs font-bold">—</span>
+            </div>
+            <div>
+              <span class="text-ink-600 text-[10px] uppercase block">Sector Median EV/EBITDA</span>
+              <span id="sector-ev" class="text-amber-400 text-xs font-bold">—</span>
+            </div>
+            <p id="sector-compare-note" class="col-span-2 text-ink-600 text-[10px] mt-1"></p>
+          </div>
         </div>
       </div>
 
@@ -1367,6 +1378,31 @@ function buildStockURL(ticker, investment, horizon, simulations, model) {
   return `${BACKEND_URL}/api/stock/${encodeURIComponent(ticker)}?investment=${investment}&horizon=${horizon}&simulations=${simulations}&model=${model}`;
 }
 
+async function fetchSectorMetrics(sector) {
+  const wrap = document.getElementById('sector-compare');
+  if (!sector || sector === 'N/A') { wrap.classList.add('hidden'); return; }
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sector-metrics?sector=${encodeURIComponent(sector)}`);
+    if (!res.ok) { wrap.classList.add('hidden'); return; }
+    const d = await res.json();
+
+    document.getElementById('sector-pe').textContent =
+      Number.isFinite(d.trailing_pe_median) ? d.trailing_pe_median.toFixed(2) : "N/A";
+    document.getElementById('sector-ev').textContent =
+      Number.isFinite(d.ev_ebitda_median) ? d.ev_ebitda_median.toFixed(2) : "N/A";
+
+    const noteEl = document.getElementById('sector-compare-note');
+    const parts = [`${d.constituent_count} stocks in sector`];
+    if (d.constituent_count < 5) parts.push('low confidence — thin sample');
+    if (d.stale) parts.push('data may be stale');
+    noteEl.textContent = parts.join(' · ');
+
+    wrap.classList.remove('hidden');
+  } catch (e) {
+    wrap.classList.add('hidden');
+  }
+}
+
 async function fetchLiveMarketData() {
   const ticker = tickerInput.value.trim().toUpperCase();
   if (!ticker) { showError('Enter a ticker.'); return; }
@@ -1389,6 +1425,7 @@ async function fetchLiveMarketData() {
     
     document.getElementById('co-name').textContent = `${data.company} (${data.ticker})`;
     document.getElementById('co-meta').textContent = `${data.sector} · ${data.industry}`;
+    fetchSectorMetrics(data.sector);
     const peNum = parseFloat(data.pe_ratio);
     const evNum = parseFloat(data.ev_ebitda);
     document.getElementById('co-pe').textContent = Number.isFinite(peNum) ? peNum.toFixed(2) : "N/A";
