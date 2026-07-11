@@ -245,6 +245,9 @@
           <svg class="w-3.5 h-3.5 theme-toggle-icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
           <svg class="w-3.5 h-3.5 theme-toggle-icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         </button>
+        <button onclick="openExportModal()" title="Data Export Dashboard" class="text-ink-600 hover:text-cyan-400 transition-colors border border-ink-600 rounded p-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+        </button>
         <span class="text-[10px] font-mono font-normal tracking-widest text-ink-600 border border-ink-600 rounded px-1.5 py-0.5" id="status-pill">OFFLINE</span>
       </h1>
       <div class="flex items-center justify-between text-[10px] font-mono text-ink-600 mb-4 -mt-2">
@@ -257,7 +260,6 @@
         <button onclick="setAppMode('single')" id="btn-mode-single" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single</button>
         <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
         <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏆 Top</button>
-        <button onclick="openExportModal()" id="btn-mode-export" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">⬇ Export</button>
       </div>
     </div>
 
@@ -2950,6 +2952,7 @@ async function importHoldingsCsv() {
       <h2 class="text-cyan-400 uppercase tracking-wider text-xs">⬇ Data Export Dashboard</h2>
       <button onclick="closeExportModal()" class="text-ink-400 hover:text-white">✕</button>
     </div>
+    <p class="text-[11px] text-ink-500 mb-4">Downloads plain CSV files — a single .csv if you pick one category, or a small .zip of combined CSVs if you pick more than one.</p>
 
     <div class="space-y-4">
       <div>
@@ -3073,10 +3076,16 @@ async function runExport() {
       throw new Error(err.detail || `Export failed (${response.status})`);
     }
     const blob = await response.blob();
+    const contentType = response.headers.get('Content-Type') || '';
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename=([^;]+)/);
+    const filename = nameMatch
+      ? nameMatch[1].trim()
+      : (contentType.includes('zip') ? `stock_export_${Date.now()}.zip` : `stock_export_${Date.now()}.csv`);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `stock_export_${Date.now()}.zip`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
