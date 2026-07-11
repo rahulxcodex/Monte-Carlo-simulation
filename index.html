@@ -257,6 +257,7 @@
         <button onclick="setAppMode('single')" id="btn-mode-single" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single</button>
         <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
         <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏆 Top</button>
+        <button onclick="openExportModal()" id="btn-mode-export" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">⬇ Export</button>
       </div>
     </div>
 
@@ -2936,6 +2937,151 @@ async function importHoldingsCsv() {
     if (errors.length) showError(`Imported ${rows.length} trade(s), skipped ${errors.length} invalid line(s): ${errors[0]}`);
   } catch (err) {
     showError('CSV import failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+<!-- Data Export Dashboard modal -->
+<div id="export-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+  <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-ink-900 border border-ink-600 rounded-lg p-5 font-mono text-sm">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-cyan-400 uppercase tracking-wider text-xs">⬇ Data Export Dashboard</h2>
+      <button onclick="closeExportModal()" class="text-ink-400 hover:text-white">✕</button>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Tickers (comma or newline separated)</label>
+        <textarea id="export-tickers" rows="3" placeholder="RELIANCE.NS, TCS.NS, INFY.NS ..." class="w-full bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs"></textarea>
+      </div>
+
+      <div class="flex gap-2 items-end">
+        <div class="flex-1">
+          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Or load an entire sector (Nifty50)</label>
+          <select id="export-sector-select" class="w-full bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+            <option value="">Select sector/industry…</option>
+          </select>
+        </div>
+        <button onclick="loadSectorTickers()" class="px-3 py-1.5 text-[11px] rounded bg-ink-700 border border-ink-600 hover:border-cyan-500">Add tickers</button>
+      </div>
+
+      <div>
+        <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Price intervals</label>
+        <div class="flex flex-wrap gap-3 text-xs">
+          <label class="flex items-center gap-1"><input type="checkbox" class="export-interval" value="daily" checked> Daily</label>
+          <label class="flex items-center gap-1"><input type="checkbox" class="export-interval" value="weekly"> Weekly</label>
+          <label class="flex items-center gap-1"><input type="checkbox" class="export-interval" value="monthly"> Monthly</label>
+          <label class="flex items-center gap-1"><input type="checkbox" class="export-interval" value="yearly"> Yearly</label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Include</label>
+        <div class="flex flex-wrap gap-4 text-xs">
+          <label class="flex items-center gap-1"><input type="checkbox" id="export-include-prices" checked> Prices</label>
+          <label class="flex items-center gap-1"><input type="checkbox" id="export-include-fundamentals" checked> Fundamentals (beta, P/E, P/B, D/E book & market, margins…)</label>
+          <label class="flex items-center gap-1"><input type="checkbox" id="export-include-financials"> P&amp;L / Balance Sheet / Cash Flow</label>
+        </div>
+      </div>
+
+      <div id="export-financials-period-row" class="hidden">
+        <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Financials period</label>
+        <select id="export-financials-period" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+          <option value="annual">Annual</option>
+          <option value="quarterly">Quarterly</option>
+        </select>
+      </div>
+
+      <div id="export-status" class="text-[11px] text-ink-400"></div>
+
+      <button id="export-download-btn" onclick="runExport()" class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black font-semibold text-xs uppercase tracking-wider">Download ZIP</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('export-include-financials').addEventListener('change', function () {
+  document.getElementById('export-financials-period-row').classList.toggle('hidden', !this.checked);
+});
+
+async function openExportModal() {
+  document.getElementById('export-modal').classList.remove('hidden');
+  const sel = document.getElementById('export-sector-select');
+  if (sel.options.length <= 1) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/export/sectors`);
+      const data = await res.json();
+      (data.industries || []).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    } catch (e) { /* non-fatal, manual ticker entry still works */ }
+  }
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.add('hidden');
+}
+
+async function loadSectorTickers() {
+  const sector = document.getElementById('export-sector-select').value;
+  if (!sector) return;
+  const statusEl = document.getElementById('export-status');
+  statusEl.textContent = `Loading ${sector} constituents...`;
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/export/sector-tickers?sector=${encodeURIComponent(sector)}`);
+    const data = await res.json();
+    const box = document.getElementById('export-tickers');
+    const existing = box.value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const merged = Array.from(new Set([...existing, ...(data.tickers || []).map(t => t.ticker)]));
+    box.value = merged.join(', ');
+    statusEl.textContent = `Added ${data.count} tickers from ${sector}.`;
+  } catch (e) {
+    statusEl.textContent = 'Failed to load sector tickers.';
+  }
+}
+
+async function runExport() {
+  const statusEl = document.getElementById('export-status');
+  const btn = document.getElementById('export-download-btn');
+  const tickers = document.getElementById('export-tickers').value
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  if (!tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
+
+  const intervals = Array.from(document.querySelectorAll('.export-interval:checked')).map(el => el.value);
+  const include = {
+    prices: document.getElementById('export-include-prices').checked,
+    fundamentals: document.getElementById('export-include-fundamentals').checked,
+    financials: document.getElementById('export-include-financials').checked,
+  };
+  const financials_period = document.getElementById('export-financials-period').value;
+
+  btn.disabled = true;
+  statusEl.textContent = `Fetching data for ${tickers.length} ticker(s)... this can take a while for large batches.`;
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/export/data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers, intervals, include, financials_period }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Export failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stock_export_${Date.now()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    statusEl.textContent = `Done — downloaded data for ${tickers.length} ticker(s).`;
+  } catch (e) {
+    statusEl.textContent = 'Export failed: ' + e.message;
   } finally {
     btn.disabled = false;
   }
