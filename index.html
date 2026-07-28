@@ -334,6 +334,15 @@
               <span class="text-ink-600 text-[10px] uppercase block">EV / EBITDA</span>
               <span id="co-ev" class="text-cyan-400 text-xs font-bold">—</span>
             </div>
+            <div>
+              <span class="text-ink-600 text-[10px] uppercase block">Beta (Regression)</span>
+              <span id="co-beta-regression" class="text-cyan-400 text-xs font-bold">—</span>
+            </div>
+            <div>
+              <span class="text-ink-600 text-[10px] uppercase block">Beta (Bottom-Up)</span>
+              <span id="co-beta-bottom-up" class="text-cyan-400 text-xs font-bold">—</span>
+              <span id="co-beta-bottom-up-note" class="text-ink-600 text-[9px] block"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -1402,6 +1411,20 @@ async function fetchLiveMarketData() {
     const evNum = parseFloat(data.ev_ebitda);
     document.getElementById('co-pe').textContent = Number.isFinite(peNum) ? peNum.toFixed(2) : "N/A";
     document.getElementById('co-ev').textContent = Number.isFinite(evNum) ? evNum.toFixed(2) : "N/A";
+
+    const betaRegNum = parseFloat(data.beta_regression);
+    document.getElementById('co-beta-regression').textContent = Number.isFinite(betaRegNum) ? betaRegNum.toFixed(2) : "N/A";
+    const betaBUNum = parseFloat(data.beta_bottom_up);
+    const betaBUEl = document.getElementById('co-beta-bottom-up');
+    const betaBUNoteEl = document.getElementById('co-beta-bottom-up-note');
+    if (Number.isFinite(betaBUNum)) {
+      betaBUEl.textContent = betaBUNum.toFixed(2);
+      betaBUNoteEl.textContent = `${data.beta_bottom_up_peer_count || 0} peers`;
+    } else {
+      betaBUEl.textContent = "N/A";
+      betaBUNoteEl.textContent = data.beta_bottom_up_flag || (data.beta_bottom_up_peer_count ? `${data.beta_bottom_up_peer_count} peers` : "");
+    }
+
     document.getElementById('company-card').classList.remove('hidden');
 
     document.getElementById('mu').value = (data.expected_return * 100).toFixed(1);
