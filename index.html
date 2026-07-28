@@ -3036,13 +3036,20 @@ async function importHoldingsCsv() {
             <option value="2">2</option>
             <option value="3" selected>3</option>
             <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
           </select>
+          <p class="text-[10px] text-ink-500 mt-1">Source typically only has ~4 years of annual history; fewer years than requested may come back.</p>
         </div>
       </div>
 
       <div id="export-status" class="text-[11px] text-ink-400"></div>
 
-      <button id="export-download-btn" onclick="runExport()" class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black font-semibold text-xs uppercase tracking-wider">Download ZIP</button>
+      <button id="export-download-btn" onclick="runExport()" class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black font-semibold text-xs uppercase tracking-wider">Download Excel (.xlsx)</button>
     </div>
   </div>
 </div>
@@ -3136,9 +3143,7 @@ async function runExport() {
     const contentType = response.headers.get('Content-Type') || '';
     const disposition = response.headers.get('Content-Disposition') || '';
     const nameMatch = disposition.match(/filename=([^;]+)/);
-    const filename = nameMatch
-      ? nameMatch[1].trim()
-      : (contentType.includes('zip') ? `stock_export_${Date.now()}.zip` : `stock_export_${Date.now()}.csv`);
+    const filename = nameMatch ? nameMatch[1].trim() : `stock_export_${Date.now()}.xlsx`;
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
