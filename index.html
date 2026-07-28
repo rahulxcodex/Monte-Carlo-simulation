@@ -2956,6 +2956,14 @@ async function importHoldingsCsv() {
 
     <div class="space-y-4">
       <div>
+        <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Add ticker</label>
+        <div class="relative">
+          <input type="text" id="export-ticker-search" autocomplete="off" placeholder="Search company or ticker..."
+                 class="w-full bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+          <div id="export-suggest-box" class="hidden absolute mt-1 w-full glass-strong rounded-lg shadow-2xl overflow-hidden max-h-56 overflow-y-auto border border-ink-600 z-10"></div>
+        </div>
+      </div>
+      <div>
         <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Tickers (comma or newline separated)</label>
         <textarea id="export-tickers" rows="3" placeholder="RELIANCE.NS, TCS.NS, INFY.NS ..." class="w-full bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs"></textarea>
       </div>
@@ -2989,12 +2997,24 @@ async function importHoldingsCsv() {
         </div>
       </div>
 
-      <div id="export-financials-period-row" class="hidden">
-        <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Financials period</label>
-        <select id="export-financials-period" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
-          <option value="annual">Annual</option>
-          <option value="quarterly">Quarterly</option>
-        </select>
+      <div id="export-financials-period-row" class="hidden flex gap-3 items-end">
+        <div>
+          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Financials period</label>
+          <select id="export-financials-period" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+            <option value="annual">Annual</option>
+            <option value="quarterly">Quarterly</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1"># periods back</label>
+          <select id="export-financials-years" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+            <option value="0">All available</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
       </div>
 
       <div id="export-status" class="text-[11px] text-ink-400"></div>
@@ -3009,8 +3029,21 @@ document.getElementById('export-include-financials').addEventListener('change', 
   document.getElementById('export-financials-period-row').classList.toggle('hidden', !this.checked);
 });
 
+let exportSuggestInit = false;
 async function openExportModal() {
   document.getElementById('export-modal').classList.remove('hidden');
+  if (!exportSuggestInit) {
+    exportSuggestInit = true;
+    const searchEl = document.getElementById('export-ticker-search');
+    const boxEl = document.getElementById('export-suggest-box');
+    createTickerSuggest(searchEl, boxEl, (ticker) => {
+      const box = document.getElementById('export-tickers');
+      const existing = box.value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+      if (!existing.includes(ticker)) existing.push(ticker);
+      box.value = existing.join(', ');
+      searchEl.value = '';
+    });
+  }
   const sel = document.getElementById('export-sector-select');
   if (sel.options.length <= 1) {
     try {
@@ -3062,6 +3095,7 @@ async function runExport() {
     financials: document.getElementById('export-include-financials').checked,
   };
   const financials_period = document.getElementById('export-financials-period').value;
+  const financials_years = parseInt(document.getElementById('export-financials-years').value, 10) || 0;
 
   btn.disabled = true;
   statusEl.textContent = `Fetching data for ${tickers.length} ticker(s)... this can take a while for large batches.`;
@@ -3069,7 +3103,7 @@ async function runExport() {
     const response = await fetch(`${BACKEND_URL}/api/export/data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tickers, intervals, include, financials_period }),
+      body: JSON.stringify({ tickers, intervals, include, financials_period, financials_years }),
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
