@@ -646,6 +646,7 @@
           <button onclick="switchTab('fan')" id="tab-fan" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📉 Confidence Fan</button>
           <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📊 Distribution</button>
           <button onclick="switchTab('dd')" id="tab-dd" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⚠️ Drawdown</button>
+          <button onclick="switchTab('financials')" id="tab-financials" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">🧮 Financials</button>
           <div class="ml-auto flex gap-1.5 pr-1 shrink-0">
             <button onclick="downloadChartCSV()" title="Download chart data as CSV" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">CSV</button>
             <button onclick="downloadChartPNG()" title="Download chart as PNG" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PNG</button>
@@ -668,6 +669,13 @@
           <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
           <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
           <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+
+          <div id="chart-financials" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none overflow-y-auto p-3">
+            <div id="financials-tab-cards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+            <div id="financials-tab-loading" class="hidden text-xs font-mono text-ink-500 mb-3">Loading ratio &amp; DuPont analysis…</div>
+            <div id="financials-tab-error" class="hidden text-xs font-mono text-loss mb-3"></div>
+            <div id="financials-tab-ratios" class="space-y-4"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -897,6 +905,7 @@ let currentData = null;
 let currentCompare = null;   
 let currentPortfolio = null;
 let currentTicker = '';
+let currentStockRaw = null;
 
 let baseCurrencyCode = 'INR';
 let currentCurrency = '₹';
@@ -1442,10 +1451,12 @@ async function fetchLiveMarketData() {
     document.getElementById('main-subtitle').textContent = `${data.ticker} · ${mod} · ${fmt0.format(sims)} paths · ${hor} days`;
     
     currentData = normalizeBackendData(data);
+    currentStockRaw = data;
     currentCompare = null;
     renderAllSingle();
     setStatus('LIVE', true);
     updateShareURL();
+    if (activeTab === 'financials') loadFinancialsTab();
     
     fetchHistoricalChart(pendingRestoreChartPeriod || "5y");
     pendingRestoreChartPeriod = null;
@@ -1678,7 +1689,7 @@ function renderPortfolio(data) {
 function switchTab(tab) {
   activeTab = tab;
   scheduleSessionSave();
-  ['paths', 'history', 'fan', 'hist', 'dd'].forEach(t => {
+  ['paths', 'history', 'fan', 'hist', 'dd', 'financials'].forEach(t => {
     const elBtn = document.getElementById(`tab-${t}`);
     if (elBtn) {
         elBtn.className = `px-4 py-3 text-xs font-mono whitespace-nowrap focus:outline-none ${t === tab ? 'tab-active' : 'tab-inactive'}`;
@@ -1693,6 +1704,8 @@ function switchTab(tab) {
   const targetId = tab === 'history' ? 'chart-history-plot' : `chart-${tab}`;
   const el = document.getElementById(targetId);
   if (el && el.data) Plotly.Plots.resize(el);
+
+  if (tab === 'financials') loadFinancialsTab();
 }
 
 function quickPickIndex(ticker) { tickerInput.value = ticker; fetchLiveMarketData(); }
@@ -3292,6 +3305,111 @@ async function viewFinancialModel() {
     statusEl.textContent = 'Financial model view failed: ' + e.message;
   } finally {
     btn.disabled = false;
+  }
+}let loadedFinancialsTicker = null;
+
+function _fmtCardMoney(v, currency) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  const sym = currency === 'INR' ? '₹' : (currency === 'USD' ? '$' : (currency ? currency + ' ' : ''));
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return `${sym}${(v / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${sym}${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e7 && currency === 'INR') return `${sym}${(v / 1e7).toFixed(2)}Cr`;
+  if (abs >= 1e6) return `${sym}${(v / 1e6).toFixed(2)}M`;
+  return `${sym}${v.toFixed(2)}`;
+}
+function _fmtCardPct(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  return `${(v * 100).toFixed(2)}%`;
+}
+function _fmtCardNum(v, digits = 2) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  return v.toFixed(digits);
+}
+
+function _financialCard(label, value, colorClass = 'text-white') {
+  return `
+    <div class="glass p-3 rounded-lg">
+      <p class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">${label}</p>
+      <p class="text-base font-bold font-mono ${colorClass} mt-1">${value}</p>
+    </div>`;
+}
+
+function renderFinancialsCards(data) {
+  const cur = data.currency;
+  const cardsEl = document.getElementById('financials-tab-cards');
+  cardsEl.innerHTML = [
+    _financialCard('Revenue (TTM)', _fmtCardMoney(data.revenue_ttm, cur), 'text-cyan-400'),
+    _financialCard('Gross Profit (TTM)', _fmtCardMoney(data.gross_profit_ttm, cur)),
+    _financialCard('EBITDA (TTM)', _fmtCardMoney(data.ebitda_ttm, cur)),
+    _financialCard('Net Income (TTM)', _fmtCardMoney(data.net_income_ttm, cur), data.net_income_ttm >= 0 ? 'text-gain' : 'text-loss'),
+    _financialCard('Operating Cash Flow (TTM)', _fmtCardMoney(data.operating_cash_flow_ttm, cur)),
+    _financialCard('Free Cash Flow (TTM)', _fmtCardMoney(data.free_cash_flow_ttm, cur), data.free_cash_flow_ttm >= 0 ? 'text-gain' : 'text-loss'),
+    _financialCard('Total Debt', _fmtCardMoney(data.total_debt, cur)),
+    _financialCard('Total Cash', _fmtCardMoney(data.total_cash, cur)),
+    _financialCard('Market Cap', _fmtCardMoney(data.market_cap, cur)),
+    _financialCard('Current Price', _fmtCardMoney(data.current_price, cur), 'text-cyan-400'),
+    _financialCard('Trailing P/E', Number.isFinite(parseFloat(data.pe_ratio)) ? parseFloat(data.pe_ratio).toFixed(2) : 'N/A'),
+    _financialCard('EV / EBITDA', Number.isFinite(parseFloat(data.ev_ebitda)) ? parseFloat(data.ev_ebitda).toFixed(2) : 'N/A'),
+    _financialCard('EPS (Trailing)', _fmtCardMoney(data.eps_trailing, cur)),
+    _financialCard('EPS (Forward)', _fmtCardMoney(data.eps_forward, cur)),
+    _financialCard('Dividend Yield', _fmtCardPct(data.dividend_yield)),
+    _financialCard('Book Value / Share', _fmtCardMoney(data.book_value, cur)),
+    _financialCard('52W High', _fmtCardMoney(data.fifty_two_week_high, cur), 'text-gain'),
+    _financialCard('52W Low', _fmtCardMoney(data.fifty_two_week_low, cur), 'text-loss'),
+    _financialCard('Return on Equity', _fmtCardPct(data.return_on_equity), 'text-cyan-300'),
+    _financialCard('Return on Assets', _fmtCardPct(data.return_on_assets)),
+    _financialCard('Profit Margin', _fmtCardPct(data.profit_margin)),
+    _financialCard('Operating Margin', _fmtCardPct(data.operating_margin)),
+    _financialCard('Debt / Equity', _fmtCardNum(data.debt_to_equity)),
+    _financialCard('Current Ratio', _fmtCardNum(data.current_ratio)),
+    _financialCard('Revenue Growth (YoY)', _fmtCardPct(data.revenue_growth), data.revenue_growth >= 0 ? 'text-gain' : 'text-loss'),
+    _financialCard('Earnings Growth (YoY)', _fmtCardPct(data.earnings_growth), data.earnings_growth >= 0 ? 'text-gain' : 'text-loss'),
+    _financialCard('Beta (Regression)', _fmtCardNum(parseFloat(data.beta_regression))),
+    _financialCard('Beta (Bottom-Up)', _fmtCardNum(parseFloat(data.beta_bottom_up))),
+  ].join('');
+}
+
+async function loadFinancialsTab() {
+  if (!currentStockRaw || !currentTicker) return;
+  renderFinancialsCards(currentStockRaw);
+
+  if (loadedFinancialsTicker === currentTicker) return; // already have ratios/dupont for this ticker
+
+  const loadingEl = document.getElementById('financials-tab-loading');
+  const errorEl = document.getElementById('financials-tab-error');
+  const ratiosEl = document.getElementById('financials-tab-ratios');
+  loadingEl.classList.remove('hidden');
+  errorEl.classList.add('hidden');
+  ratiosEl.innerHTML = '';
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/export/financial-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers: [currentTicker], financials_period: 'annual', financials_years: 5, format: 'json' }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Ratio/DuPont fetch failed (${response.status})`);
+    }
+    const data = await response.json();
+    const ratiosHtml = (data.ratios || []).map(b => _renderModelBlock(b, 'bg-green-800')).join('');
+    const dupontHtml = (data.dupont || []).map(b => _renderModelBlock(b, 'bg-purple-800')).join('');
+    ratiosEl.innerHTML = `
+      <div>
+        <h3 class="text-[11px] uppercase tracking-wider text-green-400 mb-2">Ratios</h3>
+        <div class="space-y-3">${ratiosHtml || '<p class="text-ink-600 text-xs">No statement data available.</p>'}</div>
+      </div>
+      <div>
+        <h3 class="text-[11px] uppercase tracking-wider text-purple-400 mb-2">DuPont ROE Decomposition</h3>
+        <div class="space-y-3">${dupontHtml || '<p class="text-ink-600 text-xs">No statement data available.</p>'}</div>
+      </div>`;
+    loadedFinancialsTicker = currentTicker;
+  } catch (e) {
+    errorEl.textContent = 'Ratio & DuPont analysis unavailable: ' + e.message;
+    errorEl.classList.remove('hidden');
+  } finally {
+    loadingEl.classList.add('hidden');
   }
 }
 </script>
