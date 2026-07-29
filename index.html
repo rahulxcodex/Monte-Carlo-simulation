@@ -195,6 +195,70 @@
   .theme-toggle-icon-sun { display:none; }
   body.light .theme-toggle-icon-sun { display:inline; }
   body.light .theme-toggle-icon-moon { display:none; }
+
+  /* Metric value transitions */
+  .metric-val { transition: color 0.3s ease; }
+  .metric-flash { animation: metricFlash 0.6s ease-out; }
+  @keyframes metricFlash {
+    0% { background: rgba(34,211,238,0.18); }
+    100% { background: transparent; }
+  }
+
+  /* Skeleton shimmer for loading states */
+  .skeleton {
+    background: linear-gradient(90deg, rgba(33,42,58,0.4) 25%, rgba(33,42,58,0.7) 50%, rgba(33,42,58,0.4) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
+    height: 1.75rem;
+    width: 70%;
+  }
+  body.light .skeleton {
+    background: linear-gradient(90deg, rgba(203,213,225,0.3) 25%, rgba(203,213,225,0.6) 50%, rgba(203,213,225,0.3) 75%);
+    background-size: 200% 100%;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* Tooltip icon for metric hints */
+  .hint-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%;
+    font-size: 8px; font-weight: 700; line-height: 1;
+    border: 1px solid currentColor; opacity: 0.45;
+    cursor: help; vertical-align: middle; margin-left: 3px;
+    transition: opacity 0.15s;
+  }
+  .hint-icon:hover { opacity: 0.85; }
+
+  /* Chart empty state */
+  .chart-empty-state {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; width: 100%;
+    color: #475064; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; text-align: center; padding: 2rem;
+  }
+
+  /* Sticky CTA on mobile */
+  @media (max-width: 1023px) {
+    #mobile-sticky-cta {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+      padding: 10px 16px; backdrop-filter: blur(12px);
+      background: rgba(7,10,16,0.92);
+      border-top: 1px solid rgba(33,42,58,0.8);
+    }
+    body.light #mobile-sticky-cta {
+      background: rgba(244,246,251,0.95);
+      border-top: 1px solid rgba(203,213,225,0.9);
+    }
+    main { padding-bottom: 70px !important; }
+  }
+  @media (min-width: 1024px) {
+    #mobile-sticky-cta { display: none !important; }
+  }
+
+  /* Clickable leaderboard rows */
+  .leaderboard-row { cursor: pointer; transition: background 0.15s; }
+  .leaderboard-row:hover { background: rgba(34,211,238,0.06); }
 </style>
 </head>
 <body class="h-screen flex flex-col lg:flex-row overflow-hidden antialiased">
@@ -301,11 +365,18 @@
 
       <!-- SINGLE ASSET INFO SECTION -->
       <div id="sidebar-single-info" class="flex flex-col gap-6">
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="quickPickIndex('^NSEI')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
-          <button onclick="quickPickIndex('^CRSLDX')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 500</button>
-          <button onclick="quickPickIndex('^NSEBANK')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty Bank</button>
-          <button onclick="quickPickIndex('^CNXIT')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty IT</button>
+        <div>
+          <p class="text-[9px] uppercase tracking-wider text-ink-600 font-mono mb-1.5">NSE Indices</p>
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <button onclick="quickPickIndex('^NSEI')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
+            <button onclick="quickPickIndex('^CRSLDX')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 500</button>
+            <button onclick="quickPickIndex('^NSEBANK')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty Bank</button>
+            <button onclick="quickPickIndex('^CNXIT')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty IT</button>
+          </div>
+          <p class="text-[9px] uppercase tracking-wider text-ink-600 font-mono mb-1.5">BSE Indices</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="quickPickIndex('^BSESN')" class="text-xs font-mono px-2 py-1.5 rounded border border-amber-500/30 text-ink-600 hover:text-amber-400 hover:border-amber-500/50 transition-colors">Sensex 30</button>
+          </div>
         </div>
 
         <!-- NIFTY 50 SECTOR BREAKDOWN -->
@@ -451,7 +522,10 @@
         <div>
           <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Index Filter</label>
           <select id="leaderboard-index" onchange="fetchLeaderboard()" class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
-            <option value="all">All NSE Equities</option>
+            <option value="all">All Equities (NSE + BSE)</option>
+            <option value="nse">NSE Only</option>
+            <option value="bse">BSE Only</option>
+            <option disabled>──────────</option>
             <option value="nifty50">Nifty 50 Components</option>
             <option value="niftybank">Nifty Bank</option>
             <option value="niftyit">Nifty IT</option>
@@ -480,10 +554,11 @@
             <option value="10" selected>Top 10</option>
             <option value="20">Top 20</option>
             <option value="50">Top 50</option>
+            <option value="100">Top 100</option>
           </select>
         </div>
         <p class="text-[10px] text-ink-600 leading-relaxed font-mono">
-          Ranked by % price return over the selected period across NSE-listed equities. Recomputed server-side roughly once a day.
+          Ranked by % price return over the selected period across NSE and BSE equities. Recomputed server-side roughly once a day.
         </p>
       </div>
 
@@ -582,60 +657,68 @@
     <!-- ================= SINGLE ASSET VIEW ================= -->
     <div id="view-single" class="flex flex-col h-full">
       <!-- Primary metrics -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
         <div class="glass p-4 rounded-lg">
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Current Price</p>
-          <p id="metric-s0" class="text-xl font-bold font-mono text-white mt-1">—</p>
+          <p id="metric-s0" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
         </div>
         <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Return (μ)</p>
-          <p id="metric-mu" class="text-xl font-bold font-mono text-white mt-1">—</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Return (μ)<span class="hint-icon" title="Annualized mean log return from historical data, projected forward">?</span></p>
+          <p id="metric-mu" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
         </div>
         <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Volatility (σ)</p>
-          <p id="metric-sigma" class="text-xl font-bold font-mono text-white mt-1">—</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Volatility (σ)<span class="hint-icon" title="EWMA-weighted annualized standard deviation of daily log returns — gives more weight to recent moves">?</span></p>
+          <p id="metric-sigma" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
         </div>
         <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Sharpe Ratio</p>
-          <p id="metric-sharpe" class="text-xl font-bold font-mono text-white mt-1">—</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Sharpe Ratio<span class="hint-icon" title="(Return − Risk-Free Rate) / Volatility — measures excess return per unit of total risk. Higher is better, >1 is good.">?</span></p>
+          <p id="metric-sharpe" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
+        </div>
+        <div class="glass p-4 rounded-lg">
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Sortino Ratio<span class="hint-icon" title="Like Sharpe but only penalizes downside volatility — positive swings don't count against the stock. More useful for skewed returns.">?</span></p>
+          <p id="metric-sortino" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <div class="glass p-4 rounded-lg">
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Portfolio</p>
-          <p id="metric-mean" class="text-xl font-bold font-mono text-white mt-1">—</p>
+          <p id="metric-mean" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
         </div>
         <div class="glass p-4 rounded-lg">
           <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Probability of Profit</p>
-          <p id="metric-profit" class="text-xl font-bold font-mono text-gain mt-1">—</p>
+          <p id="metric-profit" class="text-xl font-bold font-mono text-gain mt-1 metric-val">—</p>
         </div>
         <div class="glass p-4 rounded-lg border-loss/20">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">VaR 95% / 99%</p>
-          <p id="metric-var" class="text-xl font-bold font-mono text-loss mt-1">—</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">VaR 95% / 99%<span class="hint-icon" title="Value at Risk — the most you'd lose in the worst 5% (or 1%) of simulated outcomes over the horizon">?</span></p>
+          <p id="metric-var" class="text-xl font-bold font-mono text-loss mt-1 metric-val">—</p>
         </div>
         <div class="glass p-4 rounded-lg border-loss/20">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">CVaR 95%</p>
-          <p id="metric-cvar" class="text-xl font-bold font-mono text-loss mt-1">—</p>
+          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">CVaR 95%<span class="hint-icon" title="Conditional VaR (Expected Shortfall) — the average loss in the worst 5% of outcomes. Captures tail risk better than VaR alone.">?</span></p>
+          <p id="metric-cvar" class="text-xl font-bold font-mono text-loss mt-1 metric-val">—</p>
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <div class="glass p-3 rounded-lg flex items-center justify-between">
           <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Best (95th)</span>
-          <span id="metric-best" class="font-mono font-bold text-gain text-sm">—</span>
+          <span id="metric-best" class="font-mono font-bold text-gain text-sm metric-val">—</span>
         </div>
         <div class="glass p-3 rounded-lg flex items-center justify-between">
           <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Worst (5th)</span>
-          <span id="metric-worst" class="font-mono font-bold text-loss text-sm">—</span>
+          <span id="metric-worst" class="font-mono font-bold text-loss text-sm metric-val">—</span>
         </div>
         <div class="glass p-3 rounded-lg flex items-center justify-between">
           <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Median DD</span>
-          <span id="metric-dd-median" class="font-mono font-bold text-amber-400 text-sm">—</span>
+          <span id="metric-dd-median" class="font-mono font-bold text-amber-400 text-sm metric-val">—</span>
         </div>
         <div class="glass p-3 rounded-lg flex items-center justify-between">
           <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">95th Pct DD</span>
-          <span id="metric-dd-95" class="font-mono font-bold text-loss text-sm">—</span>
+          <span id="metric-dd-95" class="font-mono font-bold text-loss text-sm metric-val">—</span>
+        </div>
+        <div class="glass p-3 rounded-lg flex items-center justify-between" title="Longest consecutive stretch the median path stays below its running high">
+          <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Max DD Duration</span>
+          <span id="metric-dd-duration" class="font-mono font-bold text-amber-400 text-sm metric-val">—</span>
         </div>
       </div>
 
@@ -654,7 +737,9 @@
           </div>
         </div>
         <div class="relative flex-1 w-full h-full p-2 min-h-[380px]">
-          <div id="chart-paths" class="absolute inset-0 w-full h-full"></div>
+          <div id="chart-paths" class="absolute inset-0 w-full h-full">
+            <div class="chart-empty-state" id="empty-paths">Run a simulation to see projected price paths</div>
+          </div>
           
           <div id="chart-history" class="absolute inset-0 w-full h-full flex flex-col opacity-0 pointer-events-none">
              <div class="flex justify-end gap-1 px-4 mt-2 z-10 absolute right-0 top-0">
@@ -666,9 +751,15 @@
              <div id="chart-history-plot" class="flex-1 w-full h-full pt-6"></div>
           </div>
 
-          <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
-          <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
-          <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+          <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none">
+            <div class="chart-empty-state" id="empty-fan">Run a simulation to see the confidence fan</div>
+          </div>
+          <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none">
+            <div class="chart-empty-state" id="empty-hist">Run a simulation to see the price distribution</div>
+          </div>
+          <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none">
+            <div class="chart-empty-state" id="empty-dd">Run a simulation to see drawdown analysis</div>
+          </div>
 
           <div id="chart-financials" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none overflow-y-auto p-3">
             <div id="financials-tab-cards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
@@ -1224,7 +1315,7 @@ function setAppMode(mode) {
     document.getElementById('main-subtitle').textContent = 'Track the real assets you hold and how they\'re performing';
   } else if (isLeaderboard) {
     document.getElementById('main-title').textContent = 'Top Performers';
-    document.getElementById('main-subtitle').textContent = 'Highest returning NSE equities over the selected period';
+    document.getElementById('main-subtitle').textContent = 'Highest returning NSE & BSE equities over the selected period';
   } else {
     document.getElementById('main-title').textContent = 'Monte Carlo Terminal';
     document.getElementById('main-subtitle').textContent = 'Select parameters and run the matrix to begin';
@@ -1253,11 +1344,16 @@ function createTickerSuggest(inputEl, boxEl, onSelect) {
       if (!res.ok) return;
       const results = await res.json();
       if (!results.length) { hide(); return; }
-      boxEl.innerHTML = results.map(r => `
+      boxEl.innerHTML = results.map(r => {
+        const exch = r.exchange || '';
+        const badgeColor = exch === 'BSE' ? 'text-amber-400 border-amber-500/40' : exch === 'NSE' ? 'text-cyan-400 border-cyan-500/40' : exch === 'CRYPTO' ? 'text-purple-400 border-purple-500/40' : 'text-ink-600 border-ink-600';
+        const badge = exch ? `<span class="text-[9px] font-mono border rounded px-1 py-0.5 ${badgeColor}">${exch}</span>` : '';
+        return `
         <div class="suggest-row px-3 py-2 flex items-center justify-between cursor-pointer text-sm" data-ticker="${escapeHtml(r.ticker)}" data-name="${escapeHtml(r.name)}">
-          <span class="text-white">${escapeHtml(r.name)}</span>
-          <span class="text-ink-600 font-mono text-xs">${escapeHtml(r.ticker)}</span>
-        </div>`).join('');
+          <span class="text-white truncate mr-2">${escapeHtml(r.name)}</span>
+          <span class="flex items-center gap-1.5 shrink-0">${badge}<span class="text-ink-600 font-mono text-xs">${escapeHtml(r.ticker)}</span></span>
+        </div>`;
+      }).join('');
       boxEl.classList.remove('hidden');
       state.index = -1;
       boxEl.querySelectorAll('.suggest-row').forEach(row => {
@@ -1414,6 +1510,7 @@ async function fetchLiveMarketData() {
 
   setLoading(true, `Fetching ${ticker}…`);
   setStatus('SYNCING', true);
+  showMetricSkeletons();
 
   try {
     const res = await fetchWithRetry(buildStockURL(ticker, inv, hor, sims, mod));
@@ -1488,11 +1585,9 @@ async function fetchHistoricalChart(period="5y") {
         };
         
         Plotly.newPlot('chart-history-plot', [trace], {
-          paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { family: 'JetBrains Mono', color: '#8a93a6', size: 10 },
+          ...getPlotlyTheme(),
           margin: { l: 45, r: 15, t: 15, b: 35 },
-          xaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a' },
-          yaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', title: 'Price' }
+          yaxis: { ...getPlotlyTheme().yaxis, title: 'Price' }
         }, { displayModeBar: false, responsive: true });
         
     } catch(e) {
@@ -1559,7 +1654,8 @@ async function fetchPortfolioOptimization() {
 function normalizeBackendData(data) {
   return {
     s0: data.current_price, mu: data.expected_return, sigma: data.volatility,
-    sharpe: data.sharpe_ratio, investment: data.investment,
+    sharpe: data.sharpe_ratio, sortino: data.sortino_ratio,
+    investment: data.investment,
     expectedPortfolio: data.expected_portfolio,
     bestCase: data.best_case, worstCase: data.worst_case,
     probabilityProfit: data.probability_profit,
@@ -1569,24 +1665,99 @@ function normalizeBackendData(data) {
   };
 }
 
-const plotlyLayoutBase = {
-  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-  font: { family: 'JetBrains Mono, monospace', color: '#8a93a6', size: 10 },
-  margin: { l: 45, r: 15, t: 15, b: 35 },
-  xaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', linecolor: '#212a3a' },
-  yaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', linecolor: '#212a3a' },
-  legend: { orientation: 'h', y: -0.2, font: { color: '#6b7688', size: 10 } }
-};
+function getPlotlyTheme() {
+  const isLight = document.body.classList.contains('light');
+  return {
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'JetBrains Mono, monospace', color: isLight ? '#64748b' : '#8a93a6', size: 10 },
+    margin: { l: 45, r: 15, t: 15, b: 35 },
+    xaxis: { gridcolor: isLight ? '#e2e8f0' : '#161d2b', zerolinecolor: isLight ? '#cbd5e1' : '#212a3a', linecolor: isLight ? '#cbd5e1' : '#212a3a' },
+    yaxis: { gridcolor: isLight ? '#e2e8f0' : '#161d2b', zerolinecolor: isLight ? '#cbd5e1' : '#212a3a', linecolor: isLight ? '#cbd5e1' : '#212a3a' },
+    legend: { orientation: 'h', y: -0.2, font: { color: isLight ? '#64748b' : '#6b7688', size: 10 } }
+  };
+}
 const plotlyConfig = { displayModeBar: false, responsive: true };
+
+// Skeleton loading: show shimmers inside metric cards while fetching
+function showMetricSkeletons() {
+  const ids = ['metric-s0','metric-mu','metric-sigma','metric-sharpe','metric-sortino',
+               'metric-mean','metric-profit','metric-var','metric-cvar',
+               'metric-best','metric-worst','metric-dd-median','metric-dd-95','metric-dd-duration'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="skeleton"></div>';
+  });
+}
+
+// Flash animation: briefly highlight a metric card when value updates
+function flashMetric(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('metric-flash');
+  void el.offsetWidth; // force reflow
+  el.classList.add('metric-flash');
+}
+
+function flashAllMetrics() {
+  ['metric-s0','metric-mu','metric-sigma','metric-sharpe','metric-sortino',
+   'metric-mean','metric-profit','metric-var','metric-cvar',
+   'metric-best','metric-worst','metric-dd-median','metric-dd-95','metric-dd-duration'
+  ].forEach(id => flashMetric(id));
+}
+
+// Health ping on boot
+async function checkBackendHealth() {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      setStatus(data.status === 'ok' ? 'LIVE' : 'DEGRADED', data.status === 'ok');
+    } else {
+      setStatus('OFFLINE', false);
+    }
+  } catch (e) {
+    setStatus('OFFLINE', false);
+  }
+}
+setTimeout(checkBackendHealth, 500);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  // Ctrl+Enter or Cmd+Enter to run simulation
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runMatrix();
+  }
+  // Escape to clear search
+  if (e.key === 'Escape') {
+    hideSuggestions();
+    const wlBox = document.getElementById('watchlist-suggest-box');
+    if (wlBox) wlBox.classList.add('hidden');
+  }
+});
 
 function renderAllSingle() {
   const d = currentData;
   document.getElementById('empty-state').classList.add('hidden');
   
+  // Hide chart empty-state placeholders
+  ['empty-paths','empty-fan','empty-hist','empty-dd'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
   document.getElementById('metric-s0').textContent = money(d.s0);
   document.getElementById('metric-mu').textContent = pct(d.mu);
   document.getElementById('metric-sigma').textContent = pct(d.sigma);
   document.getElementById('metric-sharpe').textContent = d.sharpe.toFixed(2);
+  const sortinoEl = document.getElementById('metric-sortino');
+  if (d.sortino != null) {
+    sortinoEl.textContent = d.sortino.toFixed(2);
+    sortinoEl.className = `text-xl font-bold font-mono mt-1 metric-val ${d.sortino >= 1 ? 'text-gain' : d.sortino < 0 ? 'text-loss' : 'text-white'}`;
+  } else {
+    sortinoEl.textContent = '—';
+    sortinoEl.className = 'text-xl font-bold font-mono mt-1 metric-val text-white';
+  }
   document.getElementById('metric-mean').textContent = money(d.expectedPortfolio);
   document.getElementById('metric-profit').textContent = d.probabilityProfit.toFixed(1) + '%';
   document.getElementById('metric-var').textContent = `${money(d.var95)} / ${money(d.var99)}`;
@@ -1595,9 +1766,17 @@ function renderAllSingle() {
   document.getElementById('metric-worst').textContent = money(d.worstCase);
   document.getElementById('metric-dd-median').textContent = pctVal(d.drawdown.percentiles.p50);
   document.getElementById('metric-dd-95').textContent = pctVal(d.drawdown.percentiles.p95);
-  document.getElementById('metric-mu').className = 'text-xl font-bold font-mono mt-1 ' + (d.mu >= 0 ? 'text-gain' : 'text-loss');
+  document.getElementById('metric-dd-duration').textContent = d.drawdown.max_duration_days != null ? d.drawdown.max_duration_days + 'd' : '—';
+  document.getElementById('metric-mu').className = 'text-xl font-bold font-mono mt-1 metric-val ' + (d.mu >= 0 ? 'text-gain' : 'text-loss');
+  
+  // Conditional color for Sharpe
+  const sharpeEl = document.getElementById('metric-sharpe');
+  sharpeEl.className = `text-xl font-bold font-mono mt-1 metric-val ${d.sharpe >= 1 ? 'text-gain' : d.sharpe < 0 ? 'text-loss' : 'text-white'}`;
+
+  flashAllMetrics();
 
   const mult = (showINR && fxRate !== 1.0) ? fxRate : 1.0;
+  const plotlyLayoutBase = getPlotlyTheme();
 
   const pTraces = d.paths.map(p => ({ y: p.map(v=>v*mult), type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.10)', width: 1 }, showlegend: false, hoverinfo: 'skip' }));
   pTraces.push({ y: d.paths[0].map((_,t) => (d.paths.reduce((a,p)=>a+p[t],0)/d.paths.length)*mult), type: 'scatter', mode: 'lines', name: 'Mean', line: { color: '#22d3ee', width: 2.5 } });
@@ -1625,6 +1804,7 @@ function renderPortfolio(data) {
   document.getElementById('port-sharpe').textContent = data.sharpe_ratio.toFixed(2);
   document.getElementById('port-profit').textContent = data.probability_profit.toFixed(1) + '%';
 
+  const plotlyLayoutBase = getPlotlyTheme();
   const frontierTrace = {
     x: data.frontier.volatility.map(v => v * 100),
     y: data.frontier.return.map(r => r * 100),
@@ -1797,18 +1977,24 @@ function runClientSimulation() {
     const paths = [];
     const finalPrices = [];
     const drawdowns = [];
+    const drawdownDurations = [];
     for (let i = 0; i < sims; i++) {
       const path = [s0];
       let peak = s0, maxDD = 0;
+      let ddDur = 0, maxDDDur = 0;
       for (let t = 1; t <= hor; t++) {
         const next = path[t - 1] * Math.exp(drift + vol * randomNormal());
         path.push(next);
         peak = Math.max(peak, next);
-        maxDD = Math.max(maxDD, (peak - next) / peak);
+        const dd = (peak - next) / peak;
+        maxDD = Math.max(maxDD, dd);
+        if (dd > 0) { ddDur++; maxDDDur = Math.max(maxDDDur, ddDur); }
+        else ddDur = 0;
       }
       paths.push(path);
       finalPrices.push(path[hor]);
       drawdowns.push(maxDD * 100);
+      drawdownDurations.push(maxDDDur);
     }
 
     const percentile = (sortedArr, p) => sortedArr[Math.floor(p * (sortedArr.length - 1))];
@@ -1838,6 +2024,7 @@ function runClientSimulation() {
     currentData = {
       s0, mu, sigma,
       sharpe: (sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length - investment) / investment / (sigma || 1),
+      sortino: null,
       investment,
       expectedPortfolio: sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length,
       bestCase: percentile(sortedValues, 0.95),
@@ -1846,7 +2033,7 @@ function runClientSimulation() {
       var95: investment - percentile(sortedValues, 0.05),
       var99: investment - percentile(sortedValues, 0.01),
       cvar95,
-      drawdown: { percentiles: { p50: percentile(sortedDD, 0.5), p95: percentile(sortedDD, 0.95) }, histogram: histogram(sortedDD, 20) },
+      drawdown: { percentiles: { p50: percentile(sortedDD, 0.5), p95: percentile(sortedDD, 0.95) }, max_duration_days: percentile(drawdownDurations.sort((a,b)=>a-b), 0.5), histogram: histogram(sortedDD, 20) },
       fan, paths: paths.slice(0, 200),
       histogram: histogram(sortedFinalPrices, 30)
     };
@@ -1866,12 +2053,12 @@ function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   document.documentElement.classList.toggle('dark', !isLight);
   try { localStorage.setItem('prosim-theme', isLight ? 'light' : 'dark'); } catch (e) {}
-  ['paths', 'fan', 'hist', 'dd'].forEach(t => {
-    const el = document.getElementById(`chart-${t}`);
-    if (el && el.data) Plotly.Plots.resize(el);
-  });
-  ['frontier', 'weights', 'port-paths'].forEach(t => {
-    const el = document.getElementById(`chart-${t}`);
+  // Re-render all charts with theme-aware colors (not just resize)
+  if (currentData && appMode === 'single') renderAllSingle();
+  if (currentPortfolio && appMode === 'portfolio') renderPortfolio(currentPortfolio);
+  // Resize any remaining charts
+  ['chart-history-plot', 'chart-frontier', 'chart-weights', 'chart-port-paths', 'chart-holdings-alloc'].forEach(id => {
+    const el = document.getElementById(id);
     if (el && el.data) Plotly.Plots.resize(el);
   });
 }
@@ -2062,6 +2249,7 @@ function downloadMetricsPDF() {
       addRow('Expected Return (mu)', pct(d.mu));
       addRow('Volatility (sigma)', pct(d.sigma));
       addRow('Sharpe Ratio', d.sharpe.toFixed(2));
+      addRow('Sortino Ratio', d.sortino != null ? d.sortino.toFixed(2) : 'N/A (override mode)');
       addRow('Expected Portfolio Value', money(d.expectedPortfolio));
       addRow('Probability of Profit', d.probabilityProfit.toFixed(1) + '%');
       addRow('VaR 95%', money(d.var95));
@@ -2775,18 +2963,26 @@ async function fetchLeaderboard() {
       return;
     }
 
+    if (data.total_in_filter != null) {
+      updatedEl.textContent = (updatedEl.textContent ? updatedEl.textContent + ' · ' : '') + `${data.total_in_filter} stocks in filter`;
+    }
+
     body.innerHTML = rows.map(r => {
       const gainClass = r.return_pct >= 0 ? 'text-gain' : 'text-loss';
+      const exch = r.exchange || 'NSE';
+      const exchBadge = exch === 'BSE'
+        ? '<span class="text-[8px] font-mono text-amber-400 border border-amber-500/40 rounded px-1 py-0.5 ml-1">BSE</span>'
+        : '<span class="text-[8px] font-mono text-cyan-400 border border-cyan-500/40 rounded px-1 py-0.5 ml-1">NSE</span>';
       return `
-      <tr class="border-b border-ink-600/50 hover:bg-ink-800/30">
+      <tr class="border-b border-ink-600/50 leaderboard-row" onclick="simulateLeaderboardRow('${escapeHtml(r.ticker)}')">
         <td class="px-4 py-2.5 text-ink-600">${r.rank}</td>
         <td class="px-4 py-2.5">
           <p class="text-white">${escapeHtml(r.name)}</p>
-          <p class="text-ink-600 text-[10px]">${escapeHtml(r.ticker)}</p>
+          <p class="text-ink-600 text-[10px]">${escapeHtml(r.ticker)}${exchBadge}</p>
         </td>
         <td class="px-4 py-2.5 text-right ${gainClass}">${r.return_pct >= 0 ? '+' : ''}${r.return_pct.toFixed(1)}%</td>
         <td class="px-4 py-2.5 text-right whitespace-nowrap">
-          <button class="text-cyan-400 hover:text-cyan-300 transition-colors text-[10px] font-mono uppercase tracking-wider" onclick="simulateLeaderboardRow('${escapeHtml(r.ticker)}')" title="Run a Monte Carlo simulation for this ticker">Simulate</button>
+          <button class="text-cyan-400 hover:text-cyan-300 transition-colors text-[10px] font-mono uppercase tracking-wider" onclick="event.stopPropagation(); simulateLeaderboardRow('${escapeHtml(r.ticker)}')" title="Run a Monte Carlo simulation for this ticker">Simulate</button>
         </td>
       </tr>`;
     }).join('');
@@ -2992,6 +3188,13 @@ async function importHoldingsCsv() {
   }
 }
 </script>
+
+<!-- Mobile sticky CTA -->
+<div id="mobile-sticky-cta">
+  <button onclick="runMatrix()" class="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-ink-950 font-display font-bold text-sm py-2.5 px-4 rounded-lg transition-all">
+    Calculate Matrix
+  </button>
+</div>
 
 <!-- Data Export Dashboard modal -->
 <div id="export-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
