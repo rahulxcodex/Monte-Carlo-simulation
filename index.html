@@ -3055,6 +3055,15 @@ async function importHoldingsCsv() {
       <div id="export-status" class="text-[11px] text-ink-400"></div>
 
       <button id="export-download-btn" onclick="runExport()" class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black font-semibold text-xs uppercase tracking-wider">Download ZIP</button>
+
+      <div class="pt-3 border-t border-ink-700">
+        <p class="text-[11px] text-ink-500 mb-2">Ratio analysis & DuPont ROE decomposition (built from P&amp;L / Balance Sheet / Cash Flow) for the same ticker list above — uses the "Financials period" / "# periods back" settings above.</p>
+        <div class="flex gap-2">
+          <button id="export-model-btn" onclick="runFinancialModel()" class="flex-1 py-2 rounded bg-purple-600 hover:bg-purple-500 text-black font-semibold text-xs uppercase tracking-wider">Download .xlsx</button>
+          <button id="export-model-view-btn" onclick="viewFinancialModel()" class="flex-1 py-2 rounded bg-ink-700 border border-purple-500 text-purple-300 hover:bg-purple-900/40 font-semibold text-xs uppercase tracking-wider">Show in Dashboard</button>
+        </div>
+        <div id="export-model-results" class="mt-3 space-y-4"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -3162,6 +3171,125 @@ async function runExport() {
     statusEl.textContent = `Done — downloaded data for ${tickers.length} ticker(s).`;
   } catch (e) {
     statusEl.textContent = 'Export failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function runFinancialModel() {
+  const statusEl = document.getElementById('export-status');
+  const btn = document.getElementById('export-model-btn');
+  const tickers = document.getElementById('export-tickers').value
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  if (!tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
+
+  const financials_period = document.getElementById('export-financials-period').value;
+  const financials_years = parseInt(document.getElementById('export-financials-years').value, 10) || 5;
+
+  btn.disabled = true;
+  statusEl.textContent = `Building ratio & DuPont model for ${tickers.length} ticker(s)... this can take a while for large batches.`;
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/export/financial-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers, financials_period, financials_years }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Financial model export failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename=([^;]+)/);
+    const filename = nameMatch ? nameMatch[1].trim() : `financial_model_${Date.now()}.xlsx`;
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    statusEl.textContent = `Done — downloaded ratio & DuPont model for ${tickers.length} ticker(s).`;
+  } catch (e) {
+    statusEl.textContent = 'Financial model export failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function _fmtRatioVal(v) {
+  if (v === null || v === undefined) return '—';
+  const abs = Math.abs(v);
+  return abs >= 1000 ? v.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : v.toFixed(2);
+}
+
+function _renderModelBlock(block, accentClass) {
+  const cols = block.columns;
+  let rows = block.rows.map(row => `
+    <tr class="border-b border-ink-700/60 ${/roe/i.test(row.metric) ? 'font-semibold text-cyan-300' : ''}">
+      <td class="py-1 pr-3 text-ink-300 whitespace-nowrap">${row.metric}</td>
+      ${row.values.map(v => `<td class="py-1 px-2 text-right ${v !== null && v < 0 ? 'text-red-400' : ''}">${_fmtRatioVal(v)}</td>`).join('')}
+    </tr>`).join('');
+  const shortfall = block.periods_available < block.periods_requested
+    ? `<div class="text-[10px] italic text-ink-500 mb-1">${block.periods_available} of ${block.periods_requested} requested periods available from source</div>`
+    : '';
+  return `
+    <div class="rounded border border-ink-700 overflow-hidden">
+      <div class="${accentClass} px-2 py-1 text-xs font-semibold text-white">${block.ticker} — ${block.name}</div>
+      <div class="p-2 overflow-x-auto">
+        ${shortfall}
+        <table class="text-[11px] w-full border-collapse">
+          <thead>
+            <tr class="border-b border-ink-600 text-ink-400">
+              <th class="text-left py-1 pr-3 font-normal">Metric</th>
+              ${cols.map(c => `<th class="text-right py-1 px-2 font-normal whitespace-nowrap">${c}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function viewFinancialModel() {
+  const statusEl = document.getElementById('export-status');
+  const btn = document.getElementById('export-model-view-btn');
+  const resultsEl = document.getElementById('export-model-results');
+  const tickers = document.getElementById('export-tickers').value
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  if (!tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
+
+  const financials_period = document.getElementById('export-financials-period').value;
+  const financials_years = parseInt(document.getElementById('export-financials-years').value, 10) || 5;
+
+  btn.disabled = true;
+  resultsEl.innerHTML = '';
+  statusEl.textContent = `Computing ratios & DuPont for ${tickers.length} ticker(s)...`;
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/export/financial-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers, financials_period, financials_years, format: 'json' }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Financial model failed (${response.status})`);
+    }
+    const data = await response.json();
+    const ratiosHtml = data.ratios.map(b => _renderModelBlock(b, 'bg-green-800')).join('');
+    const dupontHtml = data.dupont.map(b => _renderModelBlock(b, 'bg-purple-800')).join('');
+    resultsEl.innerHTML = `
+      <div>
+        <h3 class="text-[11px] uppercase tracking-wider text-green-400 mb-2">Ratios</h3>
+        <div class="space-y-3">${ratiosHtml}</div>
+      </div>
+      <div>
+        <h3 class="text-[11px] uppercase tracking-wider text-purple-400 mb-2">DuPont ROE Decomposition</h3>
+        <div class="space-y-3">${dupontHtml}</div>
+      </div>`;
+    statusEl.textContent = `Showing ratio & DuPont model for ${data.ratios.length} ticker(s).`;
+  } catch (e) {
+    statusEl.textContent = 'Financial model view failed: ' + e.message;
   } finally {
     btn.disabled = false;
   }
