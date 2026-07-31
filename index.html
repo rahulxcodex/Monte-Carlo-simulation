@@ -25,8 +25,15 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- PERF: Plotly is ~3.5 MB and jsPDF ~350 KB, both of which were parser-
+     blocking in <head> — nothing could paint until they had downloaded and
+     compiled. Neither is touched during parse (Plotly is only called from
+     render functions after a fetch resolves; jsPDF only from the PDF button),
+     so `defer` is safe and gets the shell on screen far sooner. Deferred
+     scripts still execute in order, before DOMContentLoaded. -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
@@ -195,70 +202,6 @@
   .theme-toggle-icon-sun { display:none; }
   body.light .theme-toggle-icon-sun { display:inline; }
   body.light .theme-toggle-icon-moon { display:none; }
-
-  /* Metric value transitions */
-  .metric-val { transition: color 0.3s ease; }
-  .metric-flash { animation: metricFlash 0.6s ease-out; }
-  @keyframes metricFlash {
-    0% { background: rgba(34,211,238,0.18); }
-    100% { background: transparent; }
-  }
-
-  /* Skeleton shimmer for loading states */
-  .skeleton {
-    background: linear-gradient(90deg, rgba(33,42,58,0.4) 25%, rgba(33,42,58,0.7) 50%, rgba(33,42,58,0.4) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s ease-in-out infinite;
-    border-radius: 4px;
-    height: 1.75rem;
-    width: 70%;
-  }
-  body.light .skeleton {
-    background: linear-gradient(90deg, rgba(203,213,225,0.3) 25%, rgba(203,213,225,0.6) 50%, rgba(203,213,225,0.3) 75%);
-    background-size: 200% 100%;
-  }
-  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-  /* Tooltip icon for metric hints */
-  .hint-icon {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 13px; height: 13px; border-radius: 50%;
-    font-size: 8px; font-weight: 700; line-height: 1;
-    border: 1px solid currentColor; opacity: 0.45;
-    cursor: help; vertical-align: middle; margin-left: 3px;
-    transition: opacity 0.15s;
-  }
-  .hint-icon:hover { opacity: 0.85; }
-
-  /* Chart empty state */
-  .chart-empty-state {
-    display: flex; align-items: center; justify-content: center;
-    height: 100%; width: 100%;
-    color: #475064; font-family: 'JetBrains Mono', monospace;
-    font-size: 12px; text-align: center; padding: 2rem;
-  }
-
-  /* Sticky CTA on mobile */
-  @media (max-width: 1023px) {
-    #mobile-sticky-cta {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
-      padding: 10px 16px; backdrop-filter: blur(12px);
-      background: rgba(7,10,16,0.92);
-      border-top: 1px solid rgba(33,42,58,0.8);
-    }
-    body.light #mobile-sticky-cta {
-      background: rgba(244,246,251,0.95);
-      border-top: 1px solid rgba(203,213,225,0.9);
-    }
-    main { padding-bottom: 70px !important; }
-  }
-  @media (min-width: 1024px) {
-    #mobile-sticky-cta { display: none !important; }
-  }
-
-  /* Clickable leaderboard rows */
-  .leaderboard-row { cursor: pointer; transition: background 0.15s; }
-  .leaderboard-row:hover { background: rgba(34,211,238,0.06); }
 </style>
 </head>
 <body class="h-screen flex flex-col lg:flex-row overflow-hidden antialiased">
@@ -309,7 +252,8 @@
           <svg class="w-3.5 h-3.5 theme-toggle-icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
           <svg class="w-3.5 h-3.5 theme-toggle-icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         </button>
-        <button onclick="openExportModal()" title="Data Export Dashboard" class="text-ink-600 hover:text-cyan-400 transition-colors border border-ink-600 rounded p-1">
+        <span class="w-px h-4 bg-ink-600" aria-hidden="true"></span>
+        <button onclick="openExportModal()" title="Data Export &amp; Financial Model" class="text-cyan-400/80 hover:text-cyan-300 transition-colors border border-cyan-500/40 hover:border-cyan-500 rounded p-1">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
         </button>
         <span class="text-[10px] font-mono font-normal tracking-widest text-ink-600 border border-ink-600 rounded px-1.5 py-0.5" id="status-pill">OFFLINE</span>
@@ -320,10 +264,10 @@
       </div>
       
       <div class="flex rounded-md bg-ink-800 p-1 border border-ink-600 overflow-x-auto whitespace-nowrap scrollbar-hide">
-        <button onclick="setAppMode('holdings')" id="btn-mode-holdings" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏠 Home</button>
+        <button onclick="setAppMode('holdings')" id="btn-mode-holdings" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Holdings</button>
         <button onclick="setAppMode('single')" id="btn-mode-single" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-active">Single</button>
         <button onclick="setAppMode('portfolio')" id="btn-mode-portfolio" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Portfolio</button>
-        <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">🏆 Top</button>
+        <button onclick="setAppMode('leaderboard')" id="btn-mode-leaderboard" class="px-3 py-1.5 text-[11px] uppercase tracking-wider font-mono rounded mode-inactive">Leaderboard</button>
       </div>
     </div>
 
@@ -365,18 +309,11 @@
 
       <!-- SINGLE ASSET INFO SECTION -->
       <div id="sidebar-single-info" class="flex flex-col gap-6">
-        <div>
-          <p class="text-[9px] uppercase tracking-wider text-ink-600 font-mono mb-1.5">NSE Indices</p>
-          <div class="grid grid-cols-2 gap-2 mb-2">
-            <button onclick="quickPickIndex('^NSEI')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
-            <button onclick="quickPickIndex('^CRSLDX')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 500</button>
-            <button onclick="quickPickIndex('^NSEBANK')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty Bank</button>
-            <button onclick="quickPickIndex('^CNXIT')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty IT</button>
-          </div>
-          <p class="text-[9px] uppercase tracking-wider text-ink-600 font-mono mb-1.5">BSE Indices</p>
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="quickPickIndex('^BSESN')" class="text-xs font-mono px-2 py-1.5 rounded border border-amber-500/30 text-ink-600 hover:text-amber-400 hover:border-amber-500/50 transition-colors">Sensex 30</button>
-          </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="quickPickIndex('^NSEI')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 50</button>
+          <button onclick="quickPickIndex('^CRSLDX')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty 500</button>
+          <button onclick="quickPickIndex('^NSEBANK')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty Bank</button>
+          <button onclick="quickPickIndex('^CNXIT')" class="text-xs font-mono px-2 py-1.5 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">Nifty IT</button>
         </div>
 
         <!-- NIFTY 50 SECTOR BREAKDOWN -->
@@ -522,10 +459,7 @@
         <div>
           <label class="block text-[11px] uppercase tracking-wider text-ink-600 mb-1.5 font-mono">Index Filter</label>
           <select id="leaderboard-index" onchange="fetchLeaderboard()" class="w-full px-3 py-2 bg-ink-800 border border-ink-600 rounded text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
-            <option value="all">All Equities (NSE + BSE)</option>
-            <option value="nse">NSE Only</option>
-            <option value="bse">BSE Only</option>
-            <option disabled>──────────</option>
+            <option value="all">All NSE Equities</option>
             <option value="nifty50">Nifty 50 Components</option>
             <option value="niftybank">Nifty Bank</option>
             <option value="niftyit">Nifty IT</option>
@@ -554,11 +488,10 @@
             <option value="10" selected>Top 10</option>
             <option value="20">Top 20</option>
             <option value="50">Top 50</option>
-            <option value="100">Top 100</option>
           </select>
         </div>
         <p class="text-[10px] text-ink-600 leading-relaxed font-mono">
-          Ranked by % price return over the selected period across NSE and BSE equities. Recomputed server-side roughly once a day.
+          Ranked by % price return over the selected period across NSE-listed equities. Recomputed server-side roughly once a day.
         </p>
       </div>
 
@@ -656,90 +589,123 @@
 
     <!-- ================= SINGLE ASSET VIEW ================= -->
     <div id="view-single" class="flex flex-col h-full">
-      <!-- Primary metrics -->
-      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Current Price</p>
-          <p id="metric-s0" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Return (μ)<span class="hint-icon" title="Annualized mean log return from historical data, projected forward">?</span></p>
-          <p id="metric-mu" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Volatility (σ)<span class="hint-icon" title="EWMA-weighted annualized standard deviation of daily log returns — gives more weight to recent moves">?</span></p>
-          <p id="metric-sigma" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Sharpe Ratio<span class="hint-icon" title="(Return − Risk-Free Rate) / Volatility — measures excess return per unit of total risk. Higher is better, >1 is good.">?</span></p>
-          <p id="metric-sharpe" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Sortino Ratio<span class="hint-icon" title="Like Sharpe but only penalizes downside volatility — positive swings don't count against the stock. More useful for skewed returns.">?</span></p>
-          <p id="metric-sortino" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
-        </div>
-      </div>
+      <!-- ===================== METRIC GROUPS =====================
+           Restructured for grouping clarity: the twelve tiles used to sit in
+           three visually identical rows with the same spacing between rows as
+           within them, so proximity + similarity told the eye "one flat set of
+           twelve" while the meaning was three different kinds of thing. They
+           are now three labelled groups — what the asset IS, what the
+           simulation PROJECTS, and what the DOWNSIDE looks like — with tight
+           spacing inside a group and generous spacing between groups, and a
+           single hero figure so there is one obvious place to look first.
+           The whole block hides until there is data (it used to render twelve
+           em-dashes behind the empty state).                              -->
+      <div id="metrics-wrap" class="hidden">
 
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Portfolio</p>
-          <p id="metric-mean" class="text-xl font-bold font-mono text-white mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Probability of Profit</p>
-          <p id="metric-profit" class="text-xl font-bold font-mono text-gain mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg border-loss/20">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">VaR 95% / 99%<span class="hint-icon" title="Value at Risk — the most you'd lose in the worst 5% (or 1%) of simulated outcomes over the horizon">?</span></p>
-          <p id="metric-var" class="text-xl font-bold font-mono text-loss mt-1 metric-val">—</p>
-        </div>
-        <div class="glass p-4 rounded-lg border-loss/20">
-          <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">CVaR 95%<span class="hint-icon" title="Conditional VaR (Expected Shortfall) — the average loss in the worst 5% of outcomes. Captures tail risk better than VaR alone.">?</span></p>
-          <p id="metric-cvar" class="text-xl font-bold font-mono text-loss mt-1 metric-val">—</p>
-        </div>
-      </div>
+        <!-- GROUP 1 · the asset itself (context, not results — deliberately
+             the quietest of the three) -->
+        <section class="mb-7" aria-labelledby="metrics-asset-heading">
+          <h3 id="metrics-asset-heading" class="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-ink-600 font-mono mb-2">
+            Asset <span class="flex-1 h-px bg-ink-600/60"></span>
+          </h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Price</span>
+              <span id="metric-s0" class="font-mono font-semibold text-white text-sm">—</span>
+            </div>
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Return (μ)</span>
+              <span id="metric-mu" class="font-mono font-semibold text-white text-sm">—</span>
+            </div>
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Vol (σ)</span>
+              <span id="metric-sigma" class="font-mono font-semibold text-white text-sm">—</span>
+            </div>
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Sharpe</span>
+              <span id="metric-sharpe" class="font-mono font-semibold text-white text-sm">—</span>
+            </div>
+          </div>
+        </section>
 
-      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <div class="glass p-3 rounded-lg flex items-center justify-between">
-          <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Best (95th)</span>
-          <span id="metric-best" class="font-mono font-bold text-gain text-sm metric-val">—</span>
-        </div>
-        <div class="glass p-3 rounded-lg flex items-center justify-between">
-          <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Worst (5th)</span>
-          <span id="metric-worst" class="font-mono font-bold text-loss text-sm metric-val">—</span>
-        </div>
-        <div class="glass p-3 rounded-lg flex items-center justify-between">
-          <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Median DD</span>
-          <span id="metric-dd-median" class="font-mono font-bold text-amber-400 text-sm metric-val">—</span>
-        </div>
-        <div class="glass p-3 rounded-lg flex items-center justify-between">
-          <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">95th Pct DD</span>
-          <span id="metric-dd-95" class="font-mono font-bold text-loss text-sm metric-val">—</span>
-        </div>
-        <div class="glass p-3 rounded-lg flex items-center justify-between" title="Longest consecutive stretch the median path stays below its running high">
-          <span class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Max DD Duration</span>
-          <span id="metric-dd-duration" class="font-mono font-bold text-amber-400 text-sm metric-val">—</span>
-        </div>
+        <!-- GROUP 2 · what the simulation projects. Expected value is the
+             answer the user came for, so it gets the hero treatment. -->
+        <section class="mb-7" aria-labelledby="metrics-outcome-heading">
+          <h3 id="metrics-outcome-heading" class="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-cyan-400/70 font-mono mb-2">
+            Projected Outcome <span class="flex-1 h-px bg-cyan-500/20"></span>
+          </h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div class="glass p-4 rounded-lg col-span-2 border-cyan-500/25">
+              <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Expected Portfolio Value</p>
+              <p id="metric-mean" class="text-3xl lg:text-4xl font-bold font-mono text-white mt-1 leading-none">—</p>
+              <p id="metric-mean-sub" class="text-[10px] text-ink-600 font-mono mt-1.5">—</p>
+            </div>
+            <div class="glass p-4 rounded-lg">
+              <p class="text-[10.5px] text-ink-600 uppercase font-mono tracking-wider">Prob. of Profit</p>
+              <p id="metric-profit" class="text-xl font-bold font-mono text-gain mt-1">—</p>
+            </div>
+            <div class="glass p-4 rounded-lg flex flex-col justify-center gap-1.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Best (95th)</span>
+                <span id="metric-best" class="font-mono font-semibold text-gain text-sm">—</span>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Worst (5th)</span>
+                <span id="metric-worst" class="font-mono font-semibold text-loss text-sm">—</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- GROUP 3 · downside. One colour convention per kind of number:
+             currency losses in loss-red, drawdown percentages in amber (the
+             two drawdown tiles used to disagree with each other). -->
+        <section class="mb-6" aria-labelledby="metrics-risk-heading">
+          <h3 id="metrics-risk-heading" class="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-loss/70 font-mono mb-2">
+            Downside <span class="flex-1 h-px bg-loss/20"></span>
+          </h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">VaR 95 / 99</span>
+              <span id="metric-var" class="font-mono font-semibold text-loss text-sm">—</span>
+            </div>
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">CVaR 95</span>
+              <span id="metric-cvar" class="font-mono font-semibold text-loss text-sm">—</span>
+            </div>
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Median DD</span>
+              <span id="metric-dd-median" class="font-mono font-semibold text-amber-400 text-sm">—</span>
+            </div>
+            <div class="glass px-3 py-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">95th Pct DD</span>
+              <span id="metric-dd-95" class="font-mono font-semibold text-amber-400 text-sm">—</span>
+            </div>
+          </div>
+        </section>
       </div>
 
       <div class="glass rounded-lg flex-1 min-h-[440px] flex flex-col relative">
         <div class="flex items-center border-b border-ink-600 bg-ink-800/40 rounded-t-lg px-2 overflow-x-auto">
-          <button onclick="switchTab('paths')" id="tab-paths" class="px-4 py-3 text-xs font-mono tab-active focus:outline-none whitespace-nowrap">📈 Path Projection</button>
-          <button onclick="switchTab('history')" id="tab-history" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⏳ History Chart</button>
-          <button onclick="switchTab('fan')" id="tab-fan" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📉 Confidence Fan</button>
-          <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">📊 Distribution</button>
-          <button onclick="switchTab('dd')" id="tab-dd" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">⚠️ Drawdown</button>
-          <button onclick="switchTab('financials')" id="tab-financials" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">🧮 Financials</button>
-          <div class="ml-auto flex gap-1.5 pr-1 shrink-0">
+          <button onclick="switchTab('paths')" id="tab-paths" class="px-4 py-3 text-xs font-mono tab-active focus:outline-none whitespace-nowrap">Path Projection</button>
+          <button onclick="switchTab('history')" id="tab-history" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">History</button>
+          <button onclick="switchTab('fan')" id="tab-fan" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">Confidence Fan</button>
+          <button onclick="switchTab('hist')" id="tab-hist" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">Distribution</button>
+          <button onclick="switchTab('dd')" id="tab-dd" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">Drawdown</button>
+          <button onclick="switchTab('risk')" id="tab-risk" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">Stress &amp; Risk</button>
+          <button onclick="switchTab('financials')" id="tab-financials" class="px-4 py-3 text-xs font-mono tab-inactive focus:outline-none whitespace-nowrap">Financials</button>
+          <!-- Export actions sat inside the tab strip with identical styling
+               to the tabs, so "switch view" and "download a file" read as one
+               group. Fenced off with a rule and a label instead. -->
+          <div class="ml-auto flex items-center gap-1.5 pl-3 pr-1 shrink-0 border-l border-ink-600 self-stretch">
+            <span class="text-[9px] font-mono uppercase tracking-[0.15em] text-ink-600/70 hidden sm:inline">Save</span>
             <button onclick="downloadChartCSV()" title="Download chart data as CSV" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">CSV</button>
             <button onclick="downloadChartPNG()" title="Download chart as PNG" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PNG</button>
             <button onclick="downloadMetricsPDF()" title="Download metrics summary as PDF" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PDF</button>
           </div>
         </div>
         <div class="relative flex-1 w-full h-full p-2 min-h-[380px]">
-          <div id="chart-paths" class="absolute inset-0 w-full h-full">
-            <div class="chart-empty-state" id="empty-paths">Run a simulation to see projected price paths</div>
-          </div>
+          <div id="chart-paths" class="absolute inset-0 w-full h-full"></div>
           
           <div id="chart-history" class="absolute inset-0 w-full h-full flex flex-col opacity-0 pointer-events-none">
              <div class="flex justify-end gap-1 px-4 mt-2 z-10 absolute right-0 top-0">
@@ -751,14 +717,14 @@
              <div id="chart-history-plot" class="flex-1 w-full h-full pt-6"></div>
           </div>
 
-          <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none">
-            <div class="chart-empty-state" id="empty-fan">Run a simulation to see the confidence fan</div>
-          </div>
-          <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none">
-            <div class="chart-empty-state" id="empty-hist">Run a simulation to see the price distribution</div>
-          </div>
-          <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none">
-            <div class="chart-empty-state" id="empty-dd">Run a simulation to see drawdown analysis</div>
+          <div id="chart-fan" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+          <div id="chart-hist" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+          <div id="chart-dd" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none"></div>
+
+          <div id="chart-risk" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none overflow-y-auto p-3">
+            <div id="risk-tab-loading" class="hidden text-xs font-mono text-ink-500 mb-3">Running stress tests…</div>
+            <div id="risk-tab-error" class="hidden text-xs font-mono text-loss mb-3"></div>
+            <div id="risk-tab-body" class="space-y-6"></div>
           </div>
 
           <div id="chart-financials" class="absolute inset-0 w-full h-full opacity-0 pointer-events-none overflow-y-auto p-3">
@@ -798,15 +764,59 @@
         <button onclick="downloadMetricsPDF()" title="Download metrics summary as PDF" class="text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border border-ink-600 text-ink-600 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors">PDF</button>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-[500px]">
-        <div class="glass rounded-lg flex flex-col p-2 h-full min-h-[300px]">
-          <p class="text-xs text-ink-600 font-mono text-center pt-2">Efficient Frontier (10k Simulations)</p>
-          <div id="chart-frontier" class="flex-1 w-full"></div>
+      <!-- FEATURE: diversification read-out. The optimiser was already
+           computing the covariance structure; these three numbers say whether
+           the basket is genuinely diversified or one bet in five costumes. -->
+      <div id="diversification-strip" class="hidden grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+        <div class="glass px-3 py-2.5 rounded-lg">
+          <p class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Avg. Correlation</p>
+          <p id="div-avg-corr" class="font-mono font-semibold text-sm mt-0.5">—</p>
+          <p id="div-avg-corr-note" class="text-[9px] text-ink-600 font-mono mt-0.5"></p>
         </div>
-        
+        <div class="glass px-3 py-2.5 rounded-lg">
+          <p class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Diversification Ratio</p>
+          <p id="div-ratio" class="font-mono font-semibold text-sm mt-0.5">—</p>
+          <p class="text-[9px] text-ink-600 font-mono mt-0.5">1.00 = behaves as one asset</p>
+        </div>
+        <div class="glass px-3 py-2.5 rounded-lg">
+          <p class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Effective Assets</p>
+          <p id="div-effective" class="font-mono font-semibold text-sm mt-0.5">—</p>
+          <p id="div-effective-note" class="text-[9px] text-ink-600 font-mono mt-0.5"></p>
+        </div>
+        <div class="glass px-3 py-2.5 rounded-lg">
+          <p class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">Tightest Pair</p>
+          <p id="div-tightest" class="font-mono font-semibold text-sm mt-0.5">—</p>
+          <p id="div-loosest" class="text-[9px] text-ink-600 font-mono mt-0.5"></p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-[500px]">
+        <div class="flex flex-col gap-4 h-full">
+          <div class="glass rounded-lg flex flex-col p-2 flex-1 min-h-[280px]">
+            <p class="text-xs text-ink-600 font-mono text-center pt-2">Efficient Frontier (10k Simulations)</p>
+            <div id="chart-frontier" class="flex-1 w-full"></div>
+          </div>
+          <!-- FEATURE: correlation heatmap -->
+          <div class="glass rounded-lg flex flex-col p-2 flex-1 min-h-[260px]">
+            <p class="text-xs text-ink-600 font-mono text-center pt-2">Correlation Matrix (2y daily returns)</p>
+            <div id="chart-correlation" class="flex-1 w-full"></div>
+          </div>
+        </div>
+
         <div class="flex flex-col gap-4 h-full">
           <div class="glass rounded-lg flex flex-col p-2 h-1/2 min-h-[200px]">
-             <p class="text-xs text-ink-600 font-mono text-center pt-2">Max Sharpe Asset Allocation</p>
+             <div class="flex items-center justify-between px-2 pt-2">
+               <p class="text-xs text-ink-600 font-mono">Asset Allocation</p>
+               <!-- FEATURE: the backend has always returned min_vol_weights;
+                    nothing in the UI could show them. -->
+               <div class="flex rounded bg-ink-800 p-0.5 border border-ink-600">
+                 <button id="btn-weights-sharpe" onclick="setWeightsMode('sharpe')"
+                   class="px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded mode-active">Max Sharpe</button>
+                 <button id="btn-weights-minvol" onclick="setWeightsMode('minvol')"
+                   class="px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded mode-inactive">Min Vol</button>
+               </div>
+             </div>
+             <p id="weights-caption" class="text-[10px] text-ink-600 font-mono px-2 mt-1"></p>
              <div id="chart-weights" class="flex-1 w-full"></div>
           </div>
           <div class="glass rounded-lg flex flex-col p-2 h-1/2 min-h-[200px]">
@@ -1315,7 +1325,7 @@ function setAppMode(mode) {
     document.getElementById('main-subtitle').textContent = 'Track the real assets you hold and how they\'re performing';
   } else if (isLeaderboard) {
     document.getElementById('main-title').textContent = 'Top Performers';
-    document.getElementById('main-subtitle').textContent = 'Highest returning NSE & BSE equities over the selected period';
+    document.getElementById('main-subtitle').textContent = 'Highest returning NSE equities over the selected period';
   } else {
     document.getElementById('main-title').textContent = 'Monte Carlo Terminal';
     document.getElementById('main-subtitle').textContent = 'Select parameters and run the matrix to begin';
@@ -1323,6 +1333,7 @@ function setAppMode(mode) {
 
   const hasData = (isHoldings || isLeaderboard) ? true : (isSingle ? currentData != null : currentPortfolio != null);
   document.getElementById('empty-state').classList.toggle('hidden', hasData);
+  document.getElementById('metrics-wrap').classList.toggle('hidden', !(isSingle && currentData != null));
   document.getElementById('empty-msg').textContent = isSingle ? "No simulation yet — select parameters and run matrix." : "Add at least 2 tickers to build an Efficient Frontier.";
 
   if (isHoldings) refreshHoldingsList();
@@ -1344,16 +1355,11 @@ function createTickerSuggest(inputEl, boxEl, onSelect) {
       if (!res.ok) return;
       const results = await res.json();
       if (!results.length) { hide(); return; }
-      boxEl.innerHTML = results.map(r => {
-        const exch = r.exchange || '';
-        const badgeColor = exch === 'BSE' ? 'text-amber-400 border-amber-500/40' : exch === 'NSE' ? 'text-cyan-400 border-cyan-500/40' : exch === 'CRYPTO' ? 'text-purple-400 border-purple-500/40' : 'text-ink-600 border-ink-600';
-        const badge = exch ? `<span class="text-[9px] font-mono border rounded px-1 py-0.5 ${badgeColor}">${exch}</span>` : '';
-        return `
+      boxEl.innerHTML = results.map(r => `
         <div class="suggest-row px-3 py-2 flex items-center justify-between cursor-pointer text-sm" data-ticker="${escapeHtml(r.ticker)}" data-name="${escapeHtml(r.name)}">
-          <span class="text-white truncate mr-2">${escapeHtml(r.name)}</span>
-          <span class="flex items-center gap-1.5 shrink-0">${badge}<span class="text-ink-600 font-mono text-xs">${escapeHtml(r.ticker)}</span></span>
-        </div>`;
-      }).join('');
+          <span class="text-white">${escapeHtml(r.name)}</span>
+          <span class="text-ink-600 font-mono text-xs">${escapeHtml(r.ticker)}</span>
+        </div>`).join('');
       boxEl.classList.remove('hidden');
       state.index = -1;
       boxEl.querySelectorAll('.suggest-row').forEach(row => {
@@ -1377,7 +1383,7 @@ function createTickerSuggest(inputEl, boxEl, onSelect) {
     const rows = boxEl.querySelectorAll('.suggest-row');
     if (!rows.length) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); state.index = Math.min(state.index + 1, rows.length - 1); highlight(rows); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); state.index = Math.max(state.index - 1, 0); highlight(rows); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); state.index = state.index <= 0 ? -1 : state.index - 1; highlight(rows); }
     else if (e.key === 'Enter') { e.preventDefault(); rows[state.index >= 0 ? state.index : 0].click(); }
     else if (e.key === 'Escape') hide();
   });
@@ -1510,7 +1516,6 @@ async function fetchLiveMarketData() {
 
   setLoading(true, `Fetching ${ticker}…`);
   setStatus('SYNCING', true);
-  showMetricSkeletons();
 
   try {
     const res = await fetchWithRetry(buildStockURL(ticker, inv, hor, sims, mod));
@@ -1545,7 +1550,12 @@ async function fetchLiveMarketData() {
     document.getElementById('sigma').value = (data.volatility * 100).toFixed(1);
     onOverrideSlider();
 
-    document.getElementById('main-subtitle').textContent = `${data.ticker} · ${mod} · ${fmt0.format(sims)} paths · ${hor} days`;
+    // The backend may scale the path count down to stay inside its memory
+    // budget for long horizons — report what actually ran, not what we asked
+    // for.
+    const ranSims = data.simulations || sims;
+    document.getElementById('main-subtitle').textContent =
+      `${data.ticker} · ${mod} · ${fmt0.format(ranSims)} paths${data.simulations_reduced ? ' (capped for this horizon)' : ''} · ${hor} days`;
     
     currentData = normalizeBackendData(data);
     currentStockRaw = data;
@@ -1553,7 +1563,9 @@ async function fetchLiveMarketData() {
     renderAllSingle();
     setStatus('LIVE', true);
     updateShareURL();
+    loadedRiskTicker = null;
     if (activeTab === 'financials') loadFinancialsTab();
+    if (activeTab === 'risk') loadRiskTab();
     
     fetchHistoricalChart(pendingRestoreChartPeriod || "5y");
     pendingRestoreChartPeriod = null;
@@ -1584,10 +1596,12 @@ async function fetchHistoricalChart(period="5y") {
           name: 'Historical Price'
         };
         
-        Plotly.newPlot('chart-history-plot', [trace], {
-          ...getPlotlyTheme(),
+        Plotly.react('chart-history-plot', [trace], {
+          paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+          font: { family: 'JetBrains Mono', color: '#8a93a6', size: 10 },
           margin: { l: 45, r: 15, t: 15, b: 35 },
-          yaxis: { ...getPlotlyTheme().yaxis, title: 'Price' }
+          xaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a' },
+          yaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', title: 'Price' }
         }, { displayModeBar: false, responsive: true });
         
     } catch(e) {
@@ -1639,7 +1653,12 @@ async function fetchPortfolioOptimization() {
     showINR = false; 
     document.getElementById('fx-container').classList.add('hidden');
 
-    document.getElementById('main-subtitle').textContent = `Optimal Portfolio · 10k Allocations · ${fmt0.format(sims)} MC paths · ${hor} days`;
+    const ranSims = data.simulations || sims;
+    document.getElementById('main-subtitle').textContent =
+      `Optimal Portfolio · 10k Allocations · ${fmt0.format(ranSims)} MC paths${data.simulations_reduced ? ' (capped)' : ''} · ${hor} days`;
+    if (Array.isArray(data.skipped) && data.skipped.length) {
+      showError(`No usable history for ${data.skipped.join(', ')} — optimised over the remaining ${data.tickers.length} ticker(s).`);
+    }
     
     currentPortfolio = data;
     renderPortfolio(data);
@@ -1654,110 +1673,41 @@ async function fetchPortfolioOptimization() {
 function normalizeBackendData(data) {
   return {
     s0: data.current_price, mu: data.expected_return, sigma: data.volatility,
-    sharpe: data.sharpe_ratio, sortino: data.sortino_ratio,
-    investment: data.investment,
+    sharpe: data.sharpe_ratio, investment: data.investment,
     expectedPortfolio: data.expected_portfolio,
     bestCase: data.best_case, worstCase: data.worst_case,
     probabilityProfit: data.probability_profit,
     var95: data.var95, var99: data.var99, cvar95: data.cvar95,
     drawdown: data.drawdown, fan: data.fan_chart, paths: data.sample_paths,
+    // The backend downsamples the time axis of sample_paths (a 2,521-point
+    // path is far more resolution than the chart can show, and it was 4.7 MB
+    // of JSON). It sends the matching day indices so the x-axis stays honest.
+    sampleDays: data.sample_days || null,
     histogram: data.histogram, percentiles: data.percentiles
   };
 }
 
-function getPlotlyTheme() {
-  const isLight = document.body.classList.contains('light');
-  return {
-    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { family: 'JetBrains Mono, monospace', color: isLight ? '#64748b' : '#8a93a6', size: 10 },
-    margin: { l: 45, r: 15, t: 15, b: 35 },
-    xaxis: { gridcolor: isLight ? '#e2e8f0' : '#161d2b', zerolinecolor: isLight ? '#cbd5e1' : '#212a3a', linecolor: isLight ? '#cbd5e1' : '#212a3a' },
-    yaxis: { gridcolor: isLight ? '#e2e8f0' : '#161d2b', zerolinecolor: isLight ? '#cbd5e1' : '#212a3a', linecolor: isLight ? '#cbd5e1' : '#212a3a' },
-    legend: { orientation: 'h', y: -0.2, font: { color: isLight ? '#64748b' : '#6b7688', size: 10 } }
-  };
-}
+const plotlyLayoutBase = {
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { family: 'JetBrains Mono, monospace', color: '#8a93a6', size: 10 },
+  margin: { l: 45, r: 15, t: 15, b: 35 },
+  xaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', linecolor: '#212a3a' },
+  yaxis: { gridcolor: '#161d2b', zerolinecolor: '#212a3a', linecolor: '#212a3a' },
+  legend: { orientation: 'h', y: -0.2, font: { color: '#6b7688', size: 10 } }
+};
 const plotlyConfig = { displayModeBar: false, responsive: true };
-
-// Skeleton loading: show shimmers inside metric cards while fetching
-function showMetricSkeletons() {
-  const ids = ['metric-s0','metric-mu','metric-sigma','metric-sharpe','metric-sortino',
-               'metric-mean','metric-profit','metric-var','metric-cvar',
-               'metric-best','metric-worst','metric-dd-median','metric-dd-95','metric-dd-duration'];
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = '<div class="skeleton"></div>';
-  });
-}
-
-// Flash animation: briefly highlight a metric card when value updates
-function flashMetric(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.remove('metric-flash');
-  void el.offsetWidth; // force reflow
-  el.classList.add('metric-flash');
-}
-
-function flashAllMetrics() {
-  ['metric-s0','metric-mu','metric-sigma','metric-sharpe','metric-sortino',
-   'metric-mean','metric-profit','metric-var','metric-cvar',
-   'metric-best','metric-worst','metric-dd-median','metric-dd-95','metric-dd-duration'
-  ].forEach(id => flashMetric(id));
-}
-
-// Health ping on boot
-async function checkBackendHealth() {
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) {
-      const data = await res.json();
-      setStatus(data.status === 'ok' ? 'LIVE' : 'DEGRADED', data.status === 'ok');
-    } else {
-      setStatus('OFFLINE', false);
-    }
-  } catch (e) {
-    setStatus('OFFLINE', false);
-  }
-}
-setTimeout(checkBackendHealth, 500);
-
-// Keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-  // Ctrl+Enter or Cmd+Enter to run simulation
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-    e.preventDefault();
-    runMatrix();
-  }
-  // Escape to clear search
-  if (e.key === 'Escape') {
-    hideSuggestions();
-    const wlBox = document.getElementById('watchlist-suggest-box');
-    if (wlBox) wlBox.classList.add('hidden');
-  }
-});
 
 function renderAllSingle() {
   const d = currentData;
   document.getElementById('empty-state').classList.add('hidden');
+  // The metric block stays hidden until there is something to show — it used
+  // to render twelve "—" tiles underneath the empty-state message.
+  document.getElementById('metrics-wrap').classList.remove('hidden');
   
-  // Hide chart empty-state placeholders
-  ['empty-paths','empty-fan','empty-hist','empty-dd'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-
   document.getElementById('metric-s0').textContent = money(d.s0);
   document.getElementById('metric-mu').textContent = pct(d.mu);
   document.getElementById('metric-sigma').textContent = pct(d.sigma);
   document.getElementById('metric-sharpe').textContent = d.sharpe.toFixed(2);
-  const sortinoEl = document.getElementById('metric-sortino');
-  if (d.sortino != null) {
-    sortinoEl.textContent = d.sortino.toFixed(2);
-    sortinoEl.className = `text-xl font-bold font-mono mt-1 metric-val ${d.sortino >= 1 ? 'text-gain' : d.sortino < 0 ? 'text-loss' : 'text-white'}`;
-  } else {
-    sortinoEl.textContent = '—';
-    sortinoEl.className = 'text-xl font-bold font-mono mt-1 metric-val text-white';
-  }
   document.getElementById('metric-mean').textContent = money(d.expectedPortfolio);
   document.getElementById('metric-profit').textContent = d.probabilityProfit.toFixed(1) + '%';
   document.getElementById('metric-var').textContent = `${money(d.var95)} / ${money(d.var99)}`;
@@ -1766,21 +1716,25 @@ function renderAllSingle() {
   document.getElementById('metric-worst').textContent = money(d.worstCase);
   document.getElementById('metric-dd-median').textContent = pctVal(d.drawdown.percentiles.p50);
   document.getElementById('metric-dd-95').textContent = pctVal(d.drawdown.percentiles.p95);
-  document.getElementById('metric-dd-duration').textContent = d.drawdown.max_duration_days != null ? d.drawdown.max_duration_days + 'd' : '—';
-  document.getElementById('metric-mu').className = 'text-xl font-bold font-mono mt-1 metric-val ' + (d.mu >= 0 ? 'text-gain' : 'text-loss');
-  
-  // Conditional color for Sharpe
-  const sharpeEl = document.getElementById('metric-sharpe');
-  sharpeEl.className = `text-xl font-bold font-mono mt-1 metric-val ${d.sharpe >= 1 ? 'text-gain' : d.sharpe < 0 ? 'text-loss' : 'text-white'}`;
+  document.getElementById('metric-mu').className = 'font-mono font-semibold text-sm ' + (d.mu >= 0 ? 'text-gain' : 'text-loss');
 
-  flashAllMetrics();
+  // Hero sub-line: the projected value only means something next to what was
+  // put in, so state the stake and the implied move rather than making the
+  // reader compute it from the sidebar.
+  const netGain = d.expectedPortfolio - d.investment;
+  const netPct = d.investment ? (netGain / d.investment) * 100 : 0;
+  const subEl = document.getElementById('metric-mean-sub');
+  subEl.textContent = `on ${money(d.investment)} invested · ${netGain >= 0 ? '+' : ''}${money(netGain)} (${netPct >= 0 ? '+' : ''}${netPct.toFixed(1)}%)`;
+  subEl.className = 'text-[10px] font-mono mt-1.5 ' + (netGain >= 0 ? 'text-gain/80' : 'text-loss/80');
 
   const mult = (showINR && fxRate !== 1.0) ? fxRate : 1.0;
-  const plotlyLayoutBase = getPlotlyTheme();
 
-  const pTraces = d.paths.map(p => ({ y: p.map(v=>v*mult), type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.10)', width: 1 }, showlegend: false, hoverinfo: 'skip' }));
-  pTraces.push({ y: d.paths[0].map((_,t) => (d.paths.reduce((a,p)=>a+p[t],0)/d.paths.length)*mult), type: 'scatter', mode: 'lines', name: 'Mean', line: { color: '#22d3ee', width: 2.5 } });
-  Plotly.newPlot('chart-paths', pTraces, { ...plotlyLayoutBase, yaxis: { ...plotlyLayoutBase.yaxis, title: currentCurrency } }, plotlyConfig);
+  const pathX = d.sampleDays || d.paths[0].map((_, t) => t);
+  const pTraces = d.paths.map(p => ({ x: pathX, y: mult === 1 ? p : p.map(v=>v*mult), type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.10)', width: 1 }, showlegend: false, hoverinfo: 'skip' }));
+  pTraces.push({ x: pathX, y: d.paths[0].map((_,t) => (d.paths.reduce((a,p)=>a+p[t],0)/d.paths.length)*mult), type: 'scatter', mode: 'lines', name: 'Mean', line: { color: '#22d3ee', width: 2.5 } });
+  // Plotly.react reuses the existing graph div instead of tearing it down and
+  // rebuilding it, which is markedly faster on repeat runs.
+  Plotly.react('chart-paths', pTraces, { ...plotlyLayoutBase, xaxis: { ...plotlyLayoutBase.xaxis, title: 'Trading day' }, yaxis: { ...plotlyLayoutBase.yaxis, title: currentCurrency } }, plotlyConfig);
 
   const fDays = d.fan.map(f=>f.day);
   const fTraces = [
@@ -1790,10 +1744,10 @@ function renderAllSingle() {
     { x: fDays, y: d.fan.map(f=>f.p25*mult), type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(34,211,238,0.20)', line: { width: 0 }, name: '25th–75th' },
     { x: fDays, y: d.fan.map(f=>f.p50*mult), type: 'scatter', mode: 'lines', line: { color: '#22d3ee', width: 2.5 }, name: 'Median' }
   ];
-  Plotly.newPlot('chart-fan', fTraces, { ...plotlyLayoutBase, yaxis: { ...plotlyLayoutBase.yaxis, title: currentCurrency } }, plotlyConfig);
+  Plotly.react('chart-fan', fTraces, { ...plotlyLayoutBase, yaxis: { ...plotlyLayoutBase.yaxis, title: currentCurrency } }, plotlyConfig);
 
-  Plotly.newPlot('chart-hist', [{ x: d.histogram.bins.map(b=>b*mult), y: d.histogram.counts, type: 'bar', marker: { color: '#22d3ee', opacity: 0.6 } }], plotlyLayoutBase, plotlyConfig);
-  Plotly.newPlot('chart-dd', [{ x: d.drawdown.histogram.bins, y: d.drawdown.histogram.counts, type: 'bar', marker: { color: '#fbbf24', opacity: 0.6 } }], plotlyLayoutBase, plotlyConfig);
+  Plotly.react('chart-hist', [{ x: d.histogram.bins.map(b=>b*mult), y: d.histogram.counts, type: 'bar', marker: { color: '#22d3ee', opacity: 0.6 } }], plotlyLayoutBase, plotlyConfig);
+  Plotly.react('chart-dd', [{ x: d.drawdown.histogram.bins, y: d.drawdown.histogram.counts, type: 'bar', marker: { color: '#fbbf24', opacity: 0.6 } }], plotlyLayoutBase, plotlyConfig);
 }
 
 function renderPortfolio(data) {
@@ -1804,7 +1758,6 @@ function renderPortfolio(data) {
   document.getElementById('port-sharpe').textContent = data.sharpe_ratio.toFixed(2);
   document.getElementById('port-profit').textContent = data.probability_profit.toFixed(1) + '%';
 
-  const plotlyLayoutBase = getPlotlyTheme();
   const frontierTrace = {
     x: data.frontier.volatility.map(v => v * 100),
     y: data.frontier.return.map(r => r * 100),
@@ -1828,7 +1781,7 @@ function renderPortfolio(data) {
     hovertemplate: 'Max Sharpe<br>Vol: %{x:.1f}%<br>Ret: %{y:.1f}%<extra></extra>'
   };
 
-  Plotly.newPlot('chart-frontier', [frontierTrace, maxSharpeTrace], {
+  Plotly.react('chart-frontier', [frontierTrace, maxSharpeTrace], {
     ...plotlyLayoutBase,
     margin: { l: 45, r: 10, t: 10, b: 35 },
     xaxis: { ...plotlyLayoutBase.xaxis, title: 'Volatility (σ) %' },
@@ -1836,29 +1789,18 @@ function renderPortfolio(data) {
     showlegend: false
   }, plotlyConfig);
 
-  const tickers = Object.keys(data.max_sharpe_weights);
-  const weights = Object.values(data.max_sharpe_weights).map(w => w * 100);
-  
-  const weightTrace = {
-    x: tickers, y: weights, type: 'bar',
-    marker: { color: '#22d3ee', opacity: 0.8 },
-    text: weights.map(w => w.toFixed(1) + '%'), textposition: 'auto',
-    hovertemplate: '%{x}: %{y:.1f}%<extra></extra>'
-  };
-  
-  Plotly.newPlot('chart-weights', [weightTrace], {
-    ...plotlyLayoutBase,
-    margin: { l: 35, r: 10, t: 10, b: 25 },
-    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Weight %' }
-  }, plotlyConfig);
+  renderWeightsChart();
+  renderCorrelationHeatmap(data);
+  renderDiversificationStrip(data);
 
+  const portX = data.sample_days || data.sample_paths[0].map((_, t) => t);
   const pTraces = data.sample_paths.map(p => ({
-    y: p, type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.15)', width: 1 }, hoverinfo: 'skip'
+    x: portX, y: p, type: 'scatter', mode: 'lines', line: { color: 'rgba(34,211,238,0.15)', width: 1 }, hoverinfo: 'skip'
   }));
   const meanPath = data.sample_paths[0].map((_,t) => data.sample_paths.reduce((a,p)=>a+p[t],0)/data.sample_paths.length);
-  pTraces.push({ y: meanPath, type: 'scatter', mode: 'lines', line: { color: '#22d3ee', width: 2 } });
+  pTraces.push({ x: portX, y: meanPath, type: 'scatter', mode: 'lines', line: { color: '#22d3ee', width: 2 } });
   
-  Plotly.newPlot('chart-port-paths', pTraces, {
+  Plotly.react('chart-port-paths', pTraces, {
     ...plotlyLayoutBase,
     margin: { l: 45, r: 10, t: 10, b: 25 },
     yaxis: { ...plotlyLayoutBase.yaxis, title: 'Portfolio Value (₹)' },
@@ -1866,10 +1808,109 @@ function renderPortfolio(data) {
   }, plotlyConfig);
 }
 
+// FEATURE: Max Sharpe / Min Volatility allocation toggle. Both weight vectors
+// were already in the API response; only the max-Sharpe one was ever drawn.
+let weightsMode = 'sharpe';
+
+function setWeightsMode(mode) {
+  weightsMode = mode;
+  document.getElementById('btn-weights-sharpe').className =
+    `px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded ${mode === 'sharpe' ? 'mode-active' : 'mode-inactive'}`;
+  document.getElementById('btn-weights-minvol').className =
+    `px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded ${mode === 'minvol' ? 'mode-active' : 'mode-inactive'}`;
+  if (currentPortfolio) renderWeightsChart();
+}
+
+function renderWeightsChart() {
+  const data = currentPortfolio;
+  if (!data) return;
+  const isSharpe = weightsMode === 'sharpe';
+  const weightsObj = isSharpe ? data.max_sharpe_weights : (data.min_vol_weights || data.max_sharpe_weights);
+  const tickers = Object.keys(weightsObj);
+  const weights = Object.values(weightsObj).map(w => w * 100);
+
+  const ret = isSharpe ? data.expected_return : data.min_vol_return;
+  const vol = isSharpe ? data.volatility : data.min_vol_volatility;
+  const shp = isSharpe ? data.sharpe_ratio : data.min_vol_sharpe;
+  const caption = document.getElementById('weights-caption');
+  if (caption && ret != null && vol != null) {
+    caption.textContent = `μ ${pct(ret)} · σ ${pct(vol)} · Sharpe ${shp != null ? shp.toFixed(2) : '—'}`;
+  }
+
+  Plotly.react('chart-weights', [{
+    x: tickers, y: weights, type: 'bar',
+    marker: { color: isSharpe ? '#22d3ee' : '#a78bfa', opacity: 0.85 },
+    text: weights.map(w => w.toFixed(1) + '%'), textposition: 'auto',
+    hovertemplate: '%{x}: %{y:.1f}%<extra></extra>'
+  }], {
+    ...plotlyLayoutBase,
+    margin: { l: 35, r: 10, t: 6, b: 25 },
+    yaxis: { ...plotlyLayoutBase.yaxis, title: 'Weight %' }
+  }, plotlyConfig);
+}
+
+// FEATURE: correlation heatmap. A red/blue diverging scale fixed to [-1, 1]
+// so colour means the same thing across portfolios — an auto-scaled heatmap
+// makes a basket of 0.85-correlated names look reassuringly varied.
+function renderCorrelationHeatmap(data) {
+  const el = document.getElementById('chart-correlation');
+  if (!el) return;
+  const corr = data.correlation;
+  if (!corr || !corr.labels || corr.labels.length < 2) { Plotly.purge(el); return; }
+
+  Plotly.react(el, [{
+    type: 'heatmap',
+    x: corr.labels,
+    y: corr.labels,
+    z: corr.matrix,
+    zmin: -1, zmax: 1,
+    colorscale: [
+      [0, '#22d3ee'], [0.35, '#164e63'], [0.5, '#161d2b'],
+      [0.65, '#7f1d1d'], [1, '#f87171']
+    ],
+    hovertemplate: '%{y} / %{x}: %{z:.2f}<extra></extra>',
+    colorbar: { thickness: 10, tickfont: { size: 9, color: '#8a93a6' }, tickvals: [-1, 0, 1] }
+  }], {
+    ...plotlyLayoutBase,
+    margin: { l: 70, r: 10, t: 6, b: 60 },
+    xaxis: { ...plotlyLayoutBase.xaxis, tickangle: -45, tickfont: { size: 9 } },
+    yaxis: { ...plotlyLayoutBase.yaxis, autorange: 'reversed', tickfont: { size: 9 } }
+  }, plotlyConfig);
+}
+
+function renderDiversificationStrip(data) {
+  const strip = document.getElementById('diversification-strip');
+  const d = data.diversification;
+  if (!strip || !d) { if (strip) strip.classList.add('hidden'); return; }
+  strip.classList.remove('hidden');
+
+  const avg = d.avg_correlation;
+  // Colour by what the number means for the user, not by its sign.
+  const avgClass = avg >= 0.7 ? 'text-loss' : (avg >= 0.4 ? 'text-amber-400' : 'text-gain');
+  document.getElementById('div-avg-corr').innerHTML = `<span class="${avgClass}">${avg.toFixed(2)}</span>`;
+  document.getElementById('div-avg-corr-note').textContent =
+    avg >= 0.7 ? 'moves largely as one' : (avg >= 0.4 ? 'moderately linked' : 'genuinely varied');
+
+  document.getElementById('div-ratio').textContent = d.diversification_ratio.toFixed(2);
+
+  const eff = d.effective_assets;
+  const total = (data.tickers || []).length;
+  document.getElementById('div-effective').textContent = eff.toFixed(1);
+  document.getElementById('div-effective-note').textContent = total ? `of ${total} held` : '';
+
+  const tight = d.most_correlated, loose = d.least_correlated;
+  document.getElementById('div-tightest').innerHTML = tight
+    ? `${escapeHtml(tight.pair[0])} / ${escapeHtml(tight.pair[1])} <span class="text-loss">${tight.value.toFixed(2)}</span>`
+    : '—';
+  document.getElementById('div-loosest').innerHTML = loose
+    ? `loosest: ${escapeHtml(loose.pair[0])} / ${escapeHtml(loose.pair[1])} ${loose.value.toFixed(2)}`
+    : '';
+}
+
 function switchTab(tab) {
   activeTab = tab;
   scheduleSessionSave();
-  ['paths', 'history', 'fan', 'hist', 'dd', 'financials'].forEach(t => {
+  ['paths', 'history', 'fan', 'hist', 'dd', 'risk', 'financials'].forEach(t => {
     const elBtn = document.getElementById(`tab-${t}`);
     if (elBtn) {
         elBtn.className = `px-4 py-3 text-xs font-mono whitespace-nowrap focus:outline-none ${t === tab ? 'tab-active' : 'tab-inactive'}`;
@@ -1886,6 +1927,7 @@ function switchTab(tab) {
   if (el && el.data) Plotly.Plots.resize(el);
 
   if (tab === 'financials') loadFinancialsTab();
+  if (tab === 'risk') loadRiskTab();
 }
 
 function quickPickIndex(ticker) { tickerInput.value = ticker; fetchLiveMarketData(); }
@@ -1977,24 +2019,18 @@ function runClientSimulation() {
     const paths = [];
     const finalPrices = [];
     const drawdowns = [];
-    const drawdownDurations = [];
     for (let i = 0; i < sims; i++) {
       const path = [s0];
       let peak = s0, maxDD = 0;
-      let ddDur = 0, maxDDDur = 0;
       for (let t = 1; t <= hor; t++) {
         const next = path[t - 1] * Math.exp(drift + vol * randomNormal());
         path.push(next);
         peak = Math.max(peak, next);
-        const dd = (peak - next) / peak;
-        maxDD = Math.max(maxDD, dd);
-        if (dd > 0) { ddDur++; maxDDDur = Math.max(maxDDDur, ddDur); }
-        else ddDur = 0;
+        maxDD = Math.max(maxDD, (peak - next) / peak);
       }
       paths.push(path);
       finalPrices.push(path[hor]);
       drawdowns.push(maxDD * 100);
-      drawdownDurations.push(maxDDDur);
     }
 
     const percentile = (sortedArr, p) => sortedArr[Math.floor(p * (sortedArr.length - 1))];
@@ -2002,7 +2038,12 @@ function runClientSimulation() {
     const sortedValues = finalPrices.map(p => p * shares).sort((a, b) => a - b);
     const sortedDD = drawdowns.slice().sort((a, b) => a - b);
     const tailCount = Math.max(1, Math.floor(sortedValues.length * 0.05));
-    const cvar95 = investment - (sortedValues.slice(0, tailCount).reduce((a, b) => a + b, 0) / tailCount);
+    // BUGFIX: the client-side override path reported VaR/CVaR as
+    // (investment - percentile), i.e. a POSITIVE loss, while the backend
+    // reports (percentile - investment), i.e. a NEGATIVE loss. Flipping the
+    // Manual Override toggle therefore flipped the sign of every risk number
+    // on screen and in the PDF/CSV exports. Match the backend convention.
+    const cvar95 = (sortedValues.slice(0, tailCount).reduce((a, b) => a + b, 0) / tailCount) - investment;
 
     const fan = [];
     const step = Math.max(1, Math.floor(hor / 60));
@@ -2021,19 +2062,24 @@ function runClientSimulation() {
     };
     const sortedFinalPrices = finalPrices.slice().sort((a, b) => a - b);
 
+    // BUGFIX: this Sharpe was (total horizon return) / (annualised sigma)
+    // with no risk-free rate — a different statistic from the backend's
+    // (mu - Rf) / sigma, so the same ticker showed two different Sharpe
+    // ratios depending on whether Manual Override was on. Use the backend's
+    // definition.
+    const RISK_FREE_RATE = 0.05;
     currentData = {
       s0, mu, sigma,
-      sharpe: (sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length - investment) / investment / (sigma || 1),
-      sortino: null,
+      sharpe: sigma ? (mu - RISK_FREE_RATE) / sigma : 0,
       investment,
       expectedPortfolio: sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length,
       bestCase: percentile(sortedValues, 0.95),
       worstCase: percentile(sortedValues, 0.05),
       probabilityProfit: (sortedValues.filter(v => v > investment).length / sortedValues.length) * 100,
-      var95: investment - percentile(sortedValues, 0.05),
-      var99: investment - percentile(sortedValues, 0.01),
+      var95: percentile(sortedValues, 0.05) - investment,
+      var99: percentile(sortedValues, 0.01) - investment,
       cvar95,
-      drawdown: { percentiles: { p50: percentile(sortedDD, 0.5), p95: percentile(sortedDD, 0.95) }, max_duration_days: percentile(drawdownDurations.sort((a,b)=>a-b), 0.5), histogram: histogram(sortedDD, 20) },
+      drawdown: { percentiles: { p50: percentile(sortedDD, 0.5), p95: percentile(sortedDD, 0.95) }, histogram: histogram(sortedDD, 20) },
       fan, paths: paths.slice(0, 200),
       histogram: histogram(sortedFinalPrices, 30)
     };
@@ -2053,12 +2099,12 @@ function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   document.documentElement.classList.toggle('dark', !isLight);
   try { localStorage.setItem('prosim-theme', isLight ? 'light' : 'dark'); } catch (e) {}
-  // Re-render all charts with theme-aware colors (not just resize)
-  if (currentData && appMode === 'single') renderAllSingle();
-  if (currentPortfolio && appMode === 'portfolio') renderPortfolio(currentPortfolio);
-  // Resize any remaining charts
-  ['chart-history-plot', 'chart-frontier', 'chart-weights', 'chart-port-paths', 'chart-holdings-alloc'].forEach(id => {
-    const el = document.getElementById(id);
+  ['paths', 'fan', 'hist', 'dd'].forEach(t => {
+    const el = document.getElementById(`chart-${t}`);
+    if (el && el.data) Plotly.Plots.resize(el);
+  });
+  ['frontier', 'weights', 'port-paths', 'correlation'].forEach(t => {
+    const el = document.getElementById(`chart-${t}`);
     if (el && el.data) Plotly.Plots.resize(el);
   });
 }
@@ -2180,8 +2226,9 @@ function downloadChartCSV() {
       const d = currentData;
       let headers, rows, name;
       if (activeTab === 'paths') {
+        const days = d.sampleDays || d.paths[0].map((_, t) => t);
         headers = ['day', ...d.paths.map((_, i) => `path_${i + 1}`)];
-        rows = d.paths[0].map((_, t) => [t, ...d.paths.map(p => p[t])]);
+        rows = d.paths[0].map((_, t) => [days[t], ...d.paths.map(p => p[t])]);
         name = 'path_projection';
       } else if (activeTab === 'fan') {
         headers = ['day', 'p5', 'p25', 'p50', 'p75', 'p95'];
@@ -2191,10 +2238,23 @@ function downloadChartCSV() {
         headers = ['bin_start', 'count'];
         rows = d.histogram.bins.map((b, i) => [b, d.histogram.counts[i]]);
         name = 'distribution';
-      } else {
+      } else if (activeTab === 'dd') {
         headers = ['drawdown_pct_bin_start', 'count'];
         rows = d.drawdown.histogram.bins.map((b, i) => [b, d.drawdown.histogram.counts[i]]);
         name = 'drawdown';
+      } else if (activeTab === 'history') {
+        // BUGFIX: the old if/else chain fell through to the drawdown branch
+        // for any tab it didn't name, so hitting CSV on History or Financials
+        // silently downloaded drawdown data under a misleading filename.
+        const plot = document.getElementById('chart-history-plot');
+        const trace = plot && plot.data && plot.data[0];
+        if (!trace) { showError('Load the history chart first.'); return; }
+        headers = ['date', 'close'];
+        rows = trace.x.map((x, i) => [x, trace.y[i]]);
+        name = 'price_history';
+      } else {
+        showError('This tab has no tabular data to export.');
+        return;
       }
       triggerDownload(`prosim_${name}_${(tickerInput.value || 'asset').toLowerCase()}.csv`, csvFromRows(headers, rows), 'text/csv');
     } else {
@@ -2211,7 +2271,12 @@ function downloadChartCSV() {
 
 function downloadChartPNG() {
   try {
-    const elId = appMode === 'single' ? `chart-${activeTab}` : 'chart-frontier';
+    // BUGFIX: the History tab's Plotly graph lives in #chart-history-plot,
+    // not #chart-history (which is just the tab wrapper), so PNG export from
+    // that tab always reported "Nothing to export yet".
+    const elId = appMode === 'single'
+      ? (activeTab === 'history' ? 'chart-history-plot' : `chart-${activeTab}`)
+      : 'chart-frontier';
     const el = document.getElementById(elId);
     if (!el || !el.data) { showError('Nothing to export yet — run a simulation first.'); return; }
     Plotly.downloadImage(el, { format: 'png', filename: `prosim_${elId}`, width: 1200, height: 700 });
@@ -2249,7 +2314,6 @@ function downloadMetricsPDF() {
       addRow('Expected Return (mu)', pct(d.mu));
       addRow('Volatility (sigma)', pct(d.sigma));
       addRow('Sharpe Ratio', d.sharpe.toFixed(2));
-      addRow('Sortino Ratio', d.sortino != null ? d.sortino.toFixed(2) : 'N/A (override mode)');
       addRow('Expected Portfolio Value', money(d.expectedPortfolio));
       addRow('Probability of Profit', d.probabilityProfit.toFixed(1) + '%');
       addRow('VaR 95%', money(d.var95));
@@ -2754,8 +2818,9 @@ function aggregatePositions(transactions) {
   const positions = [];
   Object.keys(byTicker).forEach(ticker => {
     const txs = [...byTicker[ticker]].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const lots = []; 
+    const lots = [];
     let realized = 0;
+    let unmatchedSold = 0;
     let name = ticker;
 
     txs.forEach(t => {
@@ -2770,7 +2835,13 @@ function aggregatePositions(transactions) {
           remaining -= used;
           if (lot.qty <= 1e-9) lots.shift();
         }
-        if (remaining > 1e-9) realized += t.price * remaining;
+        // BUGFIX: this used to add the full sale proceeds to realised P&L
+        // when a sell had no matching buy lot left (possible via CSV import,
+        // which doesn't run the UI's oversell check, or out-of-order dates).
+        // Booking proceeds against a zero cost basis reports a 100% gain on
+        // quantity the user never bought. Leave the unmatched quantity out of
+        // realised P&L and flag it instead.
+        if (remaining > 1e-9) unmatchedSold += remaining;
       } else {
         lots.push({ qty: t.quantity, price: t.price });
       }
@@ -2780,8 +2851,8 @@ function aggregatePositions(transactions) {
     const costBasis = lots.reduce((s, l) => s + l.qty * l.price, 0);
     const avgPrice = openQty > 1e-9 ? costBasis / openQty : 0;
 
-    if (openQty > 1e-9 || Math.abs(realized) > 1e-9) {
-      positions.push({ id: ticker, ticker, name, quantity: openQty, avgPrice, realized });
+    if (openQty > 1e-9 || Math.abs(realized) > 1e-9 || unmatchedSold > 1e-9) {
+      positions.push({ id: ticker, ticker, name, quantity: openQty, avgPrice, realized, unmatchedSold });
     }
   });
 
@@ -2845,6 +2916,9 @@ function renderHoldings() {
     const realizedInr = it.realized * fx;
     totalRealizedInr += realizedInr;
     const realizedClass = it.realized >= 0 ? 'text-gain' : 'text-loss';
+    const unmatchedNote = it.unmatchedSold > 1e-9
+      ? `<p class="text-amber-400 text-[10px]">⚠ ${fmt2.format(it.unmatchedSold)} sold with no matching buy — excluded from realised P&L</p>`
+      : '';
     const realizedCell = `<td class="px-4 py-2.5 text-right ${realizedClass}">${it.realized !== 0 ? (it.realized >= 0 ? '+' : '') + fmt2.format(it.realized) : '—'}</td>`;
 
     if (it.quantity <= 1e-9) {
@@ -2852,7 +2926,7 @@ function renderHoldings() {
         <tr class="border-b border-ink-600/50 hover:bg-ink-800/30 opacity-70">
           <td class="px-4 py-2.5">
             <p class="text-white">${escapeHtml(it.name || it.ticker)}</p>
-            <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)} · closed</p>
+            <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)} · closed</p>${unmatchedNote}
           </td>
           <td class="px-4 py-2.5 text-right">0</td>
           <td class="px-4 py-2.5 text-right text-ink-600" colspan="4">Position closed</td>
@@ -2903,7 +2977,7 @@ function renderHoldings() {
       <tr class="border-b border-ink-600/50 hover:bg-ink-800/30">
         <td class="px-4 py-2.5">
           <p class="text-white">${escapeHtml(q.company || it.name || it.ticker)}</p>
-          <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)}</p>
+          <p class="text-ink-600 text-[10px]">${escapeHtml(it.ticker)}</p>${unmatchedNote}
         </td>
         <td class="px-4 py-2.5 text-right">${fmt2.format(it.quantity)}</td>
         <td class="px-4 py-2.5 text-right">${ccy}${fmt2.format(it.avgPrice)}</td>
@@ -2963,26 +3037,18 @@ async function fetchLeaderboard() {
       return;
     }
 
-    if (data.total_in_filter != null) {
-      updatedEl.textContent = (updatedEl.textContent ? updatedEl.textContent + ' · ' : '') + `${data.total_in_filter} stocks in filter`;
-    }
-
     body.innerHTML = rows.map(r => {
       const gainClass = r.return_pct >= 0 ? 'text-gain' : 'text-loss';
-      const exch = r.exchange || 'NSE';
-      const exchBadge = exch === 'BSE'
-        ? '<span class="text-[8px] font-mono text-amber-400 border border-amber-500/40 rounded px-1 py-0.5 ml-1">BSE</span>'
-        : '<span class="text-[8px] font-mono text-cyan-400 border border-cyan-500/40 rounded px-1 py-0.5 ml-1">NSE</span>';
       return `
-      <tr class="border-b border-ink-600/50 leaderboard-row" onclick="simulateLeaderboardRow('${escapeHtml(r.ticker)}')">
+      <tr class="border-b border-ink-600/50 hover:bg-ink-800/30">
         <td class="px-4 py-2.5 text-ink-600">${r.rank}</td>
         <td class="px-4 py-2.5">
           <p class="text-white">${escapeHtml(r.name)}</p>
-          <p class="text-ink-600 text-[10px]">${escapeHtml(r.ticker)}${exchBadge}</p>
+          <p class="text-ink-600 text-[10px]">${escapeHtml(r.ticker)}</p>
         </td>
         <td class="px-4 py-2.5 text-right ${gainClass}">${r.return_pct >= 0 ? '+' : ''}${r.return_pct.toFixed(1)}%</td>
         <td class="px-4 py-2.5 text-right whitespace-nowrap">
-          <button class="text-cyan-400 hover:text-cyan-300 transition-colors text-[10px] font-mono uppercase tracking-wider" onclick="event.stopPropagation(); simulateLeaderboardRow('${escapeHtml(r.ticker)}')" title="Run a Monte Carlo simulation for this ticker">Simulate</button>
+          <button class="text-cyan-400 hover:text-cyan-300 transition-colors text-[10px] font-mono uppercase tracking-wider" onclick="simulateLeaderboardRow('${escapeHtml(r.ticker)}')" title="Run a Monte Carlo simulation for this ticker">Simulate</button>
         </td>
       </tr>`;
     }).join('');
@@ -3062,18 +3128,39 @@ async function deleteHoldingPosition(ticker) {
   }
 }
 
+let transactionFilterTicker = null;
+
+// BUGFIX: this took a `ticker` argument and ignored it — every "≡ view
+// trades" button just scrolled to the (unfiltered) full history. It now
+// filters the table to that ticker, with a clear-filter affordance.
 function viewHoldingTrades(ticker) {
+  transactionFilterTicker = ticker || null;
+  renderTransactionHistory();
   document.getElementById('transactions-table-body').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function clearTransactionFilter() {
+  transactionFilterTicker = null;
+  renderTransactionHistory();
 }
 
 function renderTransactionHistory() {
   const body = document.getElementById('transactions-table-body');
-  const txs = [...(window.__transactionsCache || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  let txs = [...(window.__transactionsCache || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (transactionFilterTicker) txs = txs.filter(t => t.ticker === transactionFilterTicker);
+  if (transactionFilterTicker) {
+    body.innerHTML = `<tr><td colspan="6" class="px-3 py-1.5 text-[10px] text-cyan-400">
+      Showing ${escapeHtml(transactionFilterTicker)} only ·
+      <button class="underline hover:text-cyan-300" onclick="clearTransactionFilter()">show all</button>
+    </td></tr>`;
+  } else {
+    body.innerHTML = '';
+  }
   if (!txs.length) {
-    body.innerHTML = `<tr><td class="text-center text-ink-600 italic p-4">No trades recorded yet.</td></tr>`;
+    body.innerHTML += `<tr><td colspan="6" class="text-center text-ink-600 italic p-4">No trades recorded yet.</td></tr>`;
     return;
   }
-  body.innerHTML = txs.map(t => {
+  body.innerHTML += txs.map(t => {
     const typeClass = t.type === 'sell' ? 'text-loss' : 'text-gain';
     return `
       <tr class="border-b border-ink-600/30 hover:bg-ink-800/30">
@@ -3110,7 +3197,7 @@ function renderHoldingsAllocationChart(labels, values) {
   const el = document.getElementById('chart-holdings-alloc');
   if (!labels.length) { Plotly.purge(el); return; }
   const isLight = document.body.classList.contains('light');
-  Plotly.newPlot(el, [{
+  Plotly.react(el, [{
     type: 'pie',
     labels, values,
     hole: 0.55,
@@ -3134,8 +3221,12 @@ function toggleCsvImport() {
 function parseHoldingsCsv(text) {
   const rows = [];
   const errors = [];
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // BUGFIX: blank lines were filtered out *before* enumerating, so the
+  // "Line N" in every error message drifted away from the line the user is
+  // actually looking at. Keep the original index and skip blanks inside.
+  const lines = text.split(/\r?\n/).map(l => l.trim());
   lines.forEach((line, idx) => {
+    if (!line) return;
     if (/^ticker\s*,/i.test(line)) return; 
     const parts = line.split(',').map(p => p.trim());
     if (parts.length < 3) { errors.push(`Line ${idx + 1}: need at least ticker, quantity, price.`); return; }
@@ -3189,13 +3280,6 @@ async function importHoldingsCsv() {
 }
 </script>
 
-<!-- Mobile sticky CTA -->
-<div id="mobile-sticky-cta">
-  <button onclick="runMatrix()" class="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-ink-950 font-display font-bold text-sm py-2.5 px-4 rounded-lg transition-all">
-    Calculate Matrix
-  </button>
-</div>
-
 <!-- Data Export Dashboard modal -->
 <div id="export-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
   <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-ink-900 border border-ink-600 rounded-lg p-5 font-mono text-sm">
@@ -3203,8 +3287,18 @@ async function importHoldingsCsv() {
       <h2 class="text-cyan-400 uppercase tracking-wider text-xs">⬇ Data Export Dashboard</h2>
       <button onclick="closeExportModal()" class="text-ink-400 hover:text-white">✕</button>
     </div>
-    <p class="text-[11px] text-ink-500 mb-4">Downloads plain CSV files — a single .csv if you pick one category, or a small .zip of combined CSVs if you pick more than one.</p>
+    <!-- Two distinct jobs share this modal: dumping raw data, and building a
+         linked financial model. They were stacked in one scroll, which made
+         the modal long enough that the model section was easy to miss. Tabbed
+         instead, so each panel is one screen. -->
+    <div class="flex gap-1 mb-4 border-b border-ink-700">
+      <button id="export-tab-data" onclick="setExportTab('data')"
+        class="px-3 py-2 text-[11px] font-mono uppercase tracking-wider tab-active">Raw Data</button>
+      <button id="export-tab-model" onclick="setExportTab('model')"
+        class="px-3 py-2 text-[11px] font-mono uppercase tracking-wider tab-inactive">Financial Model</button>
+    </div>
 
+    <!-- Shared inputs: both panels operate on the same ticker list -->
     <div class="space-y-4">
       <div>
         <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Add ticker</label>
@@ -3228,6 +3322,37 @@ async function importHoldingsCsv() {
         </div>
         <button onclick="loadSectorTickers()" class="px-3 py-1.5 text-[11px] rounded bg-ink-700 border border-ink-600 hover:border-cyan-500">Add tickers</button>
       </div>
+      <!-- Shared by both tabs: the raw-data export and the financial model
+           both read these. They used to live inside the data panel and only
+           appear when "P&L / Balance Sheet / Cash Flow" was ticked, which
+           left the model panel silently depending on a hidden control. -->
+      <div class="flex gap-3 items-end">
+        <div>
+          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Financials period</label>
+          <select id="export-financials-period" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+            <option value="annual">Annual</option>
+            <option value="quarterly">Quarterly</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1"># periods back</label>
+          <select id="export-financials-years" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
+            <option value="0">All available</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="export-status" class="text-[11px] text-ink-400 min-h-[1rem]"></div>
+    </div>
+
+    <div id="export-panel-data" class="space-y-4 mt-4">
+      <p class="text-[11px] text-ink-500">A single formatted .xlsx workbook, one sheet per category you tick.</p>
 
       <div>
         <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Price intervals</label>
@@ -3248,46 +3373,86 @@ async function importHoldingsCsv() {
         </div>
       </div>
 
-      <div id="export-financials-period-row" class="hidden flex gap-3 items-end">
-        <div>
-          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1">Financials period</label>
-          <select id="export-financials-period" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
-            <option value="annual">Annual</option>
-            <option value="quarterly">Quarterly</option>
-          </select>
+
+      <button id="export-download-btn" onclick="runExport()" class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black font-semibold text-xs uppercase tracking-wider">Download .xlsx</button>
+    </div>
+
+    <div id="export-panel-model" class="hidden mt-4">
+      <div class="">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-[11px] uppercase tracking-wider text-purple-400">Integrated Financial Model</h3>
+          <span class="text-[9px] font-mono text-ink-600 uppercase tracking-wider">live formulas</span>
         </div>
-        <div>
-          <label class="block text-[11px] text-ink-400 uppercase tracking-wider mb-1"># periods back</label>
-          <select id="export-financials-years" class="bg-ink-800 border border-ink-600 rounded px-2 py-1.5 text-xs">
-            <option value="0">All available</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3" selected>3</option>
-            <option value="4">4</option>
-          </select>
+        <p class="text-[11px] text-ink-500 mb-3 leading-relaxed">
+          Builds a fully linked workbook from the ticker list above. The P&amp;L / Balance Sheet / Cash Flow
+          sheets hold the as-reported figures; every other sheet is <span class="text-purple-300">live Excel
+          formulas</span> pointing back at them — edit a revenue cell and the ratios, common-size, trend and
+          summary sheets all recalculate. Uses the ticker list and period settings above.
+        </p>
+
+        <p class="text-[10px] text-ink-400 uppercase tracking-wider mb-1.5">Sheets to include</p>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
+          <label class="flex items-center gap-2 text-[11px] text-ink-300">
+            <input type="checkbox" class="model-section accent-purple-500" value="statements" checked disabled>
+            Statements <span class="text-ink-600">(always)</span>
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-ink-300">
+            <input type="checkbox" class="model-section accent-purple-500" value="common_size" checked>
+            Common-size P&amp;L + BS
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-ink-300">
+            <input type="checkbox" class="model-section accent-purple-500" value="ratios" checked>
+            Ratio analysis
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-ink-300">
+            <input type="checkbox" class="model-section accent-purple-500" value="dupont" checked>
+            DuPont ROE (3 &amp; 5-step)
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-ink-300">
+            <input type="checkbox" class="model-section accent-purple-500" value="trend" checked>
+            Trend: YoY, CAGR, indexed
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-ink-300">
+            <input type="checkbox" class="model-section accent-purple-500" value="summary" checked>
+            Summary dashboard
+          </label>
         </div>
-      </div>
 
-      <div id="export-status" class="text-[11px] text-ink-400"></div>
-
-      <button id="export-download-btn" onclick="runExport()" class="w-full py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black font-semibold text-xs uppercase tracking-wider">Download ZIP</button>
-
-      <div class="pt-3 border-t border-ink-700">
-        <p class="text-[11px] text-ink-500 mb-2">Ratio analysis & DuPont ROE decomposition (built from P&amp;L / Balance Sheet / Cash Flow) for the same ticker list above — uses the "Financials period" / "# periods back" settings above.</p>
         <div class="flex gap-2">
-          <button id="export-model-btn" onclick="runFinancialModel()" class="flex-1 py-2 rounded bg-purple-600 hover:bg-purple-500 text-black font-semibold text-xs uppercase tracking-wider">Download .xlsx</button>
-          <button id="export-model-view-btn" onclick="viewFinancialModel()" class="flex-1 py-2 rounded bg-ink-700 border border-purple-500 text-purple-300 hover:bg-purple-900/40 font-semibold text-xs uppercase tracking-wider">Show in Dashboard</button>
+          <button id="model-download-btn" onclick="downloadFinancialModel()"
+            class="flex-1 py-2 rounded bg-purple-600 hover:bg-purple-500 text-black font-semibold text-xs uppercase tracking-wider disabled:opacity-50">
+            Download Linked .xlsx
+          </button>
+          <button id="model-view-btn" onclick="viewFinancialModelPro()"
+            class="flex-1 py-2 rounded bg-ink-700 border border-purple-500 text-purple-300 hover:bg-purple-900/40 font-semibold text-xs uppercase tracking-wider disabled:opacity-50">
+            Show in Dashboard
+          </button>
         </div>
-        <div id="export-model-results" class="mt-3 space-y-4"></div>
+
+        <!-- inline results: tabbed -->
+        <div id="model-results-wrap" class="hidden mt-4">
+          <div class="flex flex-wrap gap-1 mb-3 border-b border-ink-700 pb-2" id="model-tabs"></div>
+          <div id="model-results" class="space-y-3"></div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-document.getElementById('export-include-financials').addEventListener('change', function () {
-  document.getElementById('export-financials-period-row').classList.toggle('hidden', !this.checked);
-});
+// Export modal tab switching. The period/years controls are shared by both
+// panels and now live above them, so the old "show the period row only when
+// the financials checkbox is ticked" listener is gone.
+function setExportTab(tab) {
+  const isData = tab === 'data';
+  document.getElementById('export-panel-data').classList.toggle('hidden', !isData);
+  document.getElementById('export-panel-model').classList.toggle('hidden', isData);
+  document.getElementById('export-tab-data').className =
+    `px-3 py-2 text-[11px] font-mono uppercase tracking-wider ${isData ? 'tab-active' : 'tab-inactive'}`;
+  document.getElementById('export-tab-model').className =
+    `px-3 py-2 text-[11px] font-mono uppercase tracking-wider ${isData ? 'tab-inactive' : 'tab-active'}`;
+  document.getElementById('export-status').textContent = '';
+}
 
 let exportSuggestInit = false;
 async function openExportModal() {
@@ -3373,9 +3538,7 @@ async function runExport() {
     const contentType = response.headers.get('Content-Type') || '';
     const disposition = response.headers.get('Content-Disposition') || '';
     const nameMatch = disposition.match(/filename=([^;]+)/);
-    const filename = nameMatch
-      ? nameMatch[1].trim()
-      : (contentType.includes('zip') ? `stock_export_${Date.now()}.zip` : `stock_export_${Date.now()}.csv`);
+    const filename = nameMatch ? nameMatch[1].trim() : `stock_export_${Date.now()}.xlsx`;
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -3391,48 +3554,6 @@ async function runExport() {
     btn.disabled = false;
   }
 }
-async function runFinancialModel() {
-  const statusEl = document.getElementById('export-status');
-  const btn = document.getElementById('export-model-btn');
-  const tickers = document.getElementById('export-tickers').value
-    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-  if (!tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
-
-  const financials_period = document.getElementById('export-financials-period').value;
-  const financials_years = parseInt(document.getElementById('export-financials-years').value, 10) || 5;
-
-  btn.disabled = true;
-  statusEl.textContent = `Building ratio & DuPont model for ${tickers.length} ticker(s)... this can take a while for large batches.`;
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/export/financial-model`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tickers, financials_period, financials_years }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || `Financial model export failed (${response.status})`);
-    }
-    const blob = await response.blob();
-    const disposition = response.headers.get('Content-Disposition') || '';
-    const nameMatch = disposition.match(/filename=([^;]+)/);
-    const filename = nameMatch ? nameMatch[1].trim() : `financial_model_${Date.now()}.xlsx`;
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
-    statusEl.textContent = `Done — downloaded ratio & DuPont model for ${tickers.length} ticker(s).`;
-  } catch (e) {
-    statusEl.textContent = 'Financial model export failed: ' + e.message;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
 function _fmtRatioVal(v) {
   if (v === null || v === undefined) return '—';
   const abs = Math.abs(v);
@@ -3467,49 +3588,161 @@ function _renderModelBlock(block, accentClass) {
     </div>`;
 }
 
-async function viewFinancialModel() {
-  const statusEl = document.getElementById('export-status');
-  const btn = document.getElementById('export-model-view-btn');
-  const resultsEl = document.getElementById('export-model-results');
-  const tickers = document.getElementById('export-tickers').value
-    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-  if (!tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
 
-  const financials_period = document.getElementById('export-financials-period').value;
-  const financials_years = parseInt(document.getElementById('export-financials-years').value, 10) || 5;
+// ---------------------------------------------------------------------
+// FEATURE: Stress & Risk tab
+// Monte Carlo projects forward from recent behaviour; it can't tell you what
+// this asset actually did when markets broke. This tab shows realised
+// behaviour in named historical episodes (measured over real date windows,
+// and reported as unavailable rather than extrapolated when the asset wasn't
+// trading yet), a beta-scaled shock table sized to the user's own investment,
+// and ratios that penalise downside specifically.
+// ---------------------------------------------------------------------
+let loadedRiskTicker = null;
 
-  btn.disabled = true;
-  resultsEl.innerHTML = '';
-  statusEl.textContent = `Computing ratios & DuPont for ${tickers.length} ticker(s)...`;
+function _riskSigned(v, digits = 1, suffix = '%') {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '<span class="text-ink-600">—</span>';
+  const cls = v >= 0 ? 'text-gain' : 'text-loss';
+  return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(digits)}${suffix}</span>`;
+}
+
+function _riskNum(v, digits = 2) {
+  return (v === null || v === undefined || !Number.isFinite(v))
+    ? '<span class="text-ink-600">—</span>' : v.toFixed(digits);
+}
+
+function _riskStat(label, value, note) {
+  return `<div class="glass px-3 py-2.5 rounded-lg">
+      <p class="text-[10px] text-ink-600 uppercase font-mono tracking-wider">${label}</p>
+      <p class="font-mono font-semibold text-sm mt-0.5">${value}</p>
+      ${note ? `<p class="text-[9px] text-ink-600 font-mono mt-0.5">${note}</p>` : ''}
+    </div>`;
+}
+
+async function loadRiskTab() {
+  if (!currentTicker) return;
+  if (loadedRiskTicker === currentTicker) return;
+
+  const loadingEl = document.getElementById('risk-tab-loading');
+  const errorEl = document.getElementById('risk-tab-error');
+  const bodyEl = document.getElementById('risk-tab-body');
+  loadingEl.classList.remove('hidden');
+  errorEl.classList.add('hidden');
+  bodyEl.innerHTML = '';
+
+  const investment = parseFloat(document.getElementById('investment').value) || 100000;
   try {
-    const response = await fetch(`${BACKEND_URL}/api/export/financial-model`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tickers, financials_period, financials_years, format: 'json' }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || `Financial model failed (${response.status})`);
+    const res = await fetch(`${BACKEND_URL}/api/risk/${encodeURIComponent(currentTicker)}?investment=${investment}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Stress test failed (${res.status})`);
     }
-    const data = await response.json();
-    const ratiosHtml = data.ratios.map(b => _renderModelBlock(b, 'bg-green-800')).join('');
-    const dupontHtml = data.dupont.map(b => _renderModelBlock(b, 'bg-purple-800')).join('');
-    resultsEl.innerHTML = `
-      <div>
-        <h3 class="text-[11px] uppercase tracking-wider text-green-400 mb-2">Ratios</h3>
-        <div class="space-y-3">${ratiosHtml}</div>
-      </div>
-      <div>
-        <h3 class="text-[11px] uppercase tracking-wider text-purple-400 mb-2">DuPont ROE Decomposition</h3>
-        <div class="space-y-3">${dupontHtml}</div>
-      </div>`;
-    statusEl.textContent = `Showing ratio & DuPont model for ${data.ratios.length} ticker(s).`;
+    const d = await res.json();
+    const r = d.ratios;
+
+    const episodeRows = d.episodes.map(e => {
+      if (!e.available) {
+        return `<tr class="border-b border-ink-700/50 text-ink-600">
+            <td class="py-1.5 pr-3">${escapeHtml(e.label)}</td>
+            <td class="py-1.5 px-2 text-[10px]">${escapeHtml(e.window)}</td>
+            <td class="py-1.5 px-2 text-right italic" colspan="3">not yet trading</td>
+          </tr>`;
+      }
+      return `<tr class="border-b border-ink-700/50">
+          <td class="py-1.5 pr-3 text-white">${escapeHtml(e.label)}</td>
+          <td class="py-1.5 px-2 text-[10px] text-ink-600">${escapeHtml(e.window)}</td>
+          <td class="py-1.5 px-2 text-right font-semibold">${_riskSigned(e.return_pct)}</td>
+          <td class="py-1.5 px-2 text-right text-amber-400">-${e.max_drawdown_pct.toFixed(1)}%</td>
+          <td class="py-1.5 pl-2 text-right text-ink-600">${e.trading_days}d</td>
+        </tr>`;
+    }).join('');
+
+    const shockRows = d.shocks.length ? d.shocks.map(sh => `
+        <tr class="border-b border-ink-700/50">
+          <td class="py-1.5 pr-3 text-white">Market ${sh.market_move_pct.toFixed(0)}%</td>
+          <td class="py-1.5 px-2 text-right font-semibold">${_riskSigned(sh.expected_asset_move_pct)}</td>
+          <td class="py-1.5 px-2 text-right ${sh.value_impact >= 0 ? 'text-gain' : 'text-loss'}">${sh.value_impact >= 0 ? '+' : ''}${money(sh.value_impact)}</td>
+          <td class="py-1.5 pl-2 text-right text-ink-300">${money(sh.resulting_value)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4" class="py-3 text-center text-ink-600 italic">No beta available for this instrument.</td></tr>`;
+
+    bodyEl.innerHTML = `
+      <section>
+        <h3 class="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-loss/70 font-mono mb-2">
+          Realised Stress Episodes <span class="flex-1 h-px bg-loss/20"></span>
+        </h3>
+        <p class="text-[10px] text-ink-600 font-mono mb-2 leading-relaxed">
+          What this asset actually did — measured from its own price history, not simulated.
+          Episodes before it started trading are left blank rather than extrapolated.
+        </p>
+        <div class="glass rounded-lg p-3 overflow-x-auto">
+          <table class="w-full text-xs font-mono">
+            <thead><tr class="text-ink-600 text-[10px] uppercase tracking-wider border-b border-ink-600">
+              <th class="text-left py-1.5 pr-3">Episode</th>
+              <th class="text-left py-1.5 px-2">Window</th>
+              <th class="text-right py-1.5 px-2">Return</th>
+              <th class="text-right py-1.5 px-2">Max DD</th>
+              <th class="text-right py-1.5 pl-2">Length</th>
+            </tr></thead>
+            <tbody>${episodeRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-amber-400/70 font-mono mb-2">
+          Parametric Shock <span class="flex-1 h-px bg-amber-400/20"></span>
+        </h3>
+        <p class="text-[10px] text-ink-600 font-mono mb-2 leading-relaxed">
+          Beta ${_riskNum(d.beta)}${d.beta_note ? ` · ${escapeHtml(d.beta_note)}` : ''}.
+          Impact sized to your ${money(d.investment)} stake.
+        </p>
+        <div class="glass rounded-lg p-3 overflow-x-auto">
+          <table class="w-full text-xs font-mono">
+            <thead><tr class="text-ink-600 text-[10px] uppercase tracking-wider border-b border-ink-600">
+              <th class="text-left py-1.5 pr-3">Scenario</th>
+              <th class="text-right py-1.5 px-2">Asset Move</th>
+              <th class="text-right py-1.5 px-2">P&amp;L Impact</th>
+              <th class="text-right py-1.5 pl-2">Resulting Value</th>
+            </tr></thead>
+            <tbody>${shockRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-cyan-400/70 font-mono mb-2">
+          Risk-Adjusted Performance <span class="flex-1 h-px bg-cyan-500/20"></span>
+        </h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          ${_riskStat('Sortino', _riskNum(r.sortino), 'downside risk only')}
+          ${_riskStat('Calmar', _riskNum(r.calmar), 'return / worst drawdown')}
+          ${_riskStat('Sharpe', _riskNum(r.sharpe), 'total risk')}
+          ${_riskStat('Downside Dev.', r.downside_deviation !== null ? r.downside_deviation.toFixed(1) + '%' : '—', 'annualised')}
+          ${_riskStat('Max DD (2y)', `<span class="text-amber-400">-${r.max_drawdown_2y.toFixed(1)}%</span>`)}
+          ${_riskStat('Max DD (all time)', `<span class="text-amber-400">-${r.max_drawdown_all_time.toFixed(1)}%</span>`, `since ${escapeHtml(r.history_from)}`)}
+          ${_riskStat('1-Day VaR 95%', _riskSigned(r.hist_var95_1d, 2), 'historical, not modelled')}
+          ${_riskStat('1-Day CVaR 95%', _riskSigned(r.hist_cvar95_1d, 2), 'mean of the tail')}
+          ${_riskStat('Worst Day', _riskSigned(r.worst_day, 2))}
+          ${_riskStat('Best Day', _riskSigned(r.best_day, 2))}
+          ${_riskStat('Skew', _riskNum(r.skew), r.skew < 0 ? 'left-tailed' : 'right-tailed')}
+          ${_riskStat('Excess Kurtosis', _riskNum(r.kurtosis), r.kurtosis > 1 ? 'fat tails' : 'near-normal')}
+        </div>
+        <p class="text-[9px] text-ink-600 font-mono mt-2">
+          Ratios computed on ${r.observations} daily observations. Sortino and Sharpe use a ${(0.05 * 100).toFixed(0)}% risk-free rate.
+        </p>
+      </section>`;
+
+    loadedRiskTicker = currentTicker;
   } catch (e) {
-    statusEl.textContent = 'Financial model view failed: ' + e.message;
+    errorEl.textContent = 'Stress test unavailable: ' + e.message;
+    errorEl.classList.remove('hidden');
   } finally {
-    btn.disabled = false;
+    loadingEl.classList.add('hidden');
   }
-}let loadedFinancialsTicker = null;
+}
+
+let loadedFinancialsTicker = null;
 
 function _fmtCardMoney(v, currency) {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
@@ -3614,6 +3847,123 @@ async function loadFinancialsTab() {
   } finally {
     loadingEl.classList.add('hidden');
   }
+}
+</script>
+<script>
+// ---------------------------------------------------------------------
+// Integrated Financial Model — linked-workbook download + inline viewer
+// ---------------------------------------------------------------------
+const MODEL_TABS = [
+  { key: 'ratios',          label: 'Ratios',          accent: 'bg-teal-800',   text: 'text-teal-300' },
+  { key: 'dupont',          label: 'DuPont',          accent: 'bg-purple-800', text: 'text-purple-300' },
+  { key: 'common_size_pnl', label: 'Common-Size P&L', accent: 'bg-green-800',  text: 'text-green-300' },
+  { key: 'common_size_bs',  label: 'Common-Size BS',  accent: 'bg-blue-800',   text: 'text-blue-300' },
+  { key: 'trends',          label: 'Trends',          accent: 'bg-orange-800', text: 'text-orange-300' },
+];
+
+let modelData = null;
+let modelActiveTab = 'ratios';
+
+function _modelRequestBody(format) {
+  const tickers = document.getElementById('export-tickers').value
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const sections = Array.from(document.querySelectorAll('.model-section'))
+    .filter(el => el.checked).map(el => el.value);
+  return {
+    tickers,
+    financials_period: document.getElementById('export-financials-period').value,
+    financials_years: parseInt(document.getElementById('export-financials-years').value, 10) || 5,
+    sections,
+    format,
+  };
+}
+
+async function downloadFinancialModel() {
+  const statusEl = document.getElementById('export-status');
+  const btn = document.getElementById('model-download-btn');
+  const body = _modelRequestBody('xlsx');
+  if (!body.tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = `Building linked model for ${body.tickers.length} ticker(s)… this pulls three statements each, so give it a moment.`;
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/export/model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Model build failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename=([^;]+)/);
+    const filename = nameMatch ? nameMatch[1].trim() : `financial_model_${Date.now()}.xlsx`;
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    window.URL.revokeObjectURL(url);
+    statusEl.textContent = `Done — linked model downloaded for ${body.tickers.length} ticker(s). Open the Cover sheet for the colour legend and assumptions.`;
+  } catch (e) {
+    statusEl.textContent = 'Model build failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function viewFinancialModelPro() {
+  const statusEl = document.getElementById('export-status');
+  const btn = document.getElementById('model-view-btn');
+  const body = _modelRequestBody('json');
+  if (!body.tickers.length) { statusEl.textContent = 'Add at least one ticker.'; return; }
+
+  btn.disabled = true;
+  document.getElementById('model-results').innerHTML = '';
+  statusEl.textContent = `Computing model for ${body.tickers.length} ticker(s)…`;
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/export/model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Model failed (${res.status})`);
+    }
+    modelData = await res.json();
+    document.getElementById('model-results-wrap').classList.remove('hidden');
+    renderModelTabs();
+    renderModelTab(modelActiveTab);
+    statusEl.textContent = `Model ready for ${(modelData.tickers || []).length} ticker(s).`;
+  } catch (e) {
+    statusEl.textContent = 'Model view failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderModelTabs() {
+  const wrap = document.getElementById('model-tabs');
+  wrap.innerHTML = MODEL_TABS.filter(t => (modelData?.[t.key] || []).length).map(t => `
+    <button onclick="renderModelTab('${t.key}')"
+      class="px-2.5 py-1 rounded text-[10px] font-mono uppercase tracking-wider transition-colors ${
+        modelActiveTab === t.key
+          ? 'bg-ink-700 ' + t.text + ' border border-ink-600'
+          : 'text-ink-500 hover:text-ink-300 border border-transparent'}">
+      ${t.label}
+    </button>`).join('');
+}
+
+function renderModelTab(key) {
+  modelActiveTab = key;
+  renderModelTabs();
+  const tab = MODEL_TABS.find(t => t.key === key);
+  const blocks = modelData?.[key] || [];
+  document.getElementById('model-results').innerHTML = blocks.length
+    ? blocks.map(b => _renderModelBlock(b, tab.accent)).join('')
+    : '<p class="text-ink-600 text-xs">No data available for this view.</p>';
 }
 </script>
 </body>
